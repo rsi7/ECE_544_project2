@@ -56,6 +56,7 @@ XStatus HWDET_Reg_SelfTest(u32 baseaddr) {
 
 	int write_loop_index;
 	int read_loop_index;
+	int Index;
 
 	xil_printf("******************************\n\r");
 	xil_printf("* HWDET Peripheral Self Test *\n\r");
@@ -70,7 +71,7 @@ XStatus HWDET_Reg_SelfTest(u32 baseaddr) {
 	for (write_loop_index = 0 ; write_loop_index < 2; write_loop_index++) {
 		
 		HWDET_mWriteReg (baseaddr, write_loop_index*4, (write_loop_index+1)*READ_WRITE_MUL_FACTOR);
-	    xil_printf ("Wrote to memory address %x\n", (int)baseaddr + write_loop_index*4);
+
 	}
 	
 	// now read back the written values and make sure they match

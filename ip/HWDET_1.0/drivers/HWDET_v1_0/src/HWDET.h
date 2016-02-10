@@ -62,7 +62,7 @@
 
 // Register selectors
 
-enum _HWDET_register {HIGH, LOW};
+typedef enum {HIGH, LOW} _HWDET_register;
 
 /****************************************************************************/
 /************************** Function Prototypes *****************************/
@@ -72,7 +72,7 @@ enum _HWDET_register {HIGH, LOW};
 int HWDET_initialize(u32 BaseAddr);
 
 // Get count for high / low interval
-unsigned int HWDET_get_count(enum _HWDET_register reg);
+unsigned int HWDET_get_count(_HWDET_register reg);
 
 // Calculate frequency from light intensity
 unsigned int HWDET_calc_freq(void);

@@ -27,6 +27,7 @@
 // which directly reads & writes memory addresses
 
 #include "HWDET.h"
+#include "HWDET_selftest.c"
 
 /****************************************************************************/
 /************************** Constant Definitions ****************************/
@@ -44,6 +45,14 @@
 #define LED_SCALING_FACTOR (1)
 #endif
 
+/****************************************************************************/
+/***************** Macros (Inline Functions) Definitions ********************/
+/****************************************************************************/
+
+// If these pre-processors are not defined at the top-level application,
+// we can use these definitions instead.
+// They will not override pre-existing definitions, though.
+
 #ifndef MIN(a, b)
 #define MIN(a, b)  ( ((a) <= (b)) ? (a) : (b) )
 #endif
@@ -51,7 +60,6 @@
 #ifndef MAX(a, b)
 #define MAX(a, b)  ( ((a) >= (b)) ? (a) : (b) )
 #endif
-
 
 /****************************************************************************/
 /************************** Variable Definitions ****************************/
@@ -109,7 +117,7 @@ int HWDET_initialize(u32 BaseAddr) {
 *
 *****************************************************************************/
 
-unsigned int HWDET_get_count(enum _HWDET_register reg) {
+unsigned int HWDET_get_count(_HWDET_register reg) {
 	
 	unsigned int count = 0x00000000;
 
@@ -127,7 +135,7 @@ unsigned int HWDET_get_count(enum _HWDET_register reg) {
 			count = 0x00000000;
 			break;
 	}
-
+	
 	return count;
 }
 
