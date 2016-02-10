@@ -14,7 +14,15 @@ $ cat .gitignore
 
 /docs/*
 
-# ignore the ip for peripherals
-# (rotary encoder & lcd display)
+# ignore the ip directory
+# except for /src and /hdl in HWDET peripheral
 
 /ip/*
+!/ip/HWDET_1.0/
+
+/ip/HWDET_1.0/*
+!/ip/HWDET_1.0/drivers/
+!/ip/HWDET_1.0/hdl
+
+/ip/HWDET_1.0/drivers/HWDET_v1_0/*
+!/ip/HWDET_1.0/drivers/HWDET_v1_0/src
