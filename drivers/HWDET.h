@@ -51,6 +51,22 @@
 /* @} */
 
 /****************************************************************************/
+/***************** Macros (Inline Functions) Definitions ********************/
+/****************************************************************************/
+
+// If these pre-processors are not defined at the top-level application,
+// we can use these definitions instead.
+// They will not override pre-existing definitions, though.
+
+#ifndef MIN(a, b)
+#define MIN(a, b)  ( ((a) <= (b)) ? (a) : (b) )
+#endif
+
+#ifndef MAX(a, b)
+#define MAX(a, b)  ( ((a) >= (b)) ? (a) : (b) )
+#endif
+	
+/****************************************************************************/
 /**************************** Type Definitions ******************************/
 /****************************************************************************/
 
@@ -76,5 +92,8 @@ unsigned int HWDET_get_count(_HWDET_register reg);
 
 // Calculate frequency from light intensity
 unsigned int HWDET_calc_freq(void);
+
+// Calculate duty cycle from light intensity
+unsigned int HWDET_calc_duty(void);
 
 #endif

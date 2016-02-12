@@ -143,7 +143,7 @@ module n4fpga (
 
         // Global signals
         
-        .sysreset                 	(sysreset),	        // I [ 0 ] active-high reset signal for Microblaze
+        .sysreset_n                 (sysreset_n),	    // I [ 0 ] active-low reset signal for Microblaze
         .sysclk                     (sysclk),           // I [ 0 ] 100MHz clock from on-board oscillator
 
         // Connections with LCD display
@@ -192,12 +192,12 @@ module n4fpga (
 
         // Connections with GPIO
 
-        .GPIO_0_CH1_tri_i      	    (gpio_in),          // O [7:0] AXI Timer 'clk_5khz' --> bit[0] GPIO CH2 --> Port JB
-        .GPIO_0_CH2_tri_o      	    (gpio_out),         // I [7:0] AXI Timer 'pwm_out' --> bit[0] GPIO CH1
+        .GPIO_0_CH0_tri_i      	    (gpio_in),          // O [7:0] AXI Timer 'clk_5khz' --> bit[0] GPIO CH2 --> Port JB
+        .GPIO_0_CH1_tri_o      	    (gpio_out),         // I [7:0] AXI Timer 'pwm_out' --> bit[0] GPIO CH1
         
         // Connections with AXI Timer
 
         .pwm0                       (pwm_out),         	// O [ 0 ] AXI Timer's PWM output signal
-		.pwm_in 					(pwm_out));			// HWDET module's PWM input
+		.pwm_in 					(pwm_out));			// I [ 0 ] HWDET module's PWM input
 
 endmodule

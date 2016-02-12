@@ -6,7 +6,7 @@
 * @copyright Portland State University, 2016
 *
 * This file implements the self-test function for the custom peripheral "HWDET". 
-* It writes to the first two memory addresses of the peripheral and then
+* It writes to the last two memory addresses of the peripheral and then
 * reads those values back to make sure everything is correct.
 *
 * If there is any discrepancy between the two, it will return failure status.
@@ -56,7 +56,6 @@ XStatus HWDET_Reg_SelfTest(u32 baseaddr) {
 
 	int write_loop_index;
 	int read_loop_index;
-	int Index;
 
 	xil_printf("******************************\n\r");
 	xil_printf("* HWDET Peripheral Self Test *\n\r");
@@ -64,19 +63,18 @@ XStatus HWDET_Reg_SelfTest(u32 baseaddr) {
 
 	xil_printf("User logic slave module test...\n\r");
 
-	// write values to the first two registers...
-	// AXI: slv_reg0 & slv_reg1
-	// HWDET: high_count & low_count
+	// write values to the last two registers...
+	// AXI: slv_reg2 & slv_reg3
 
-	for (write_loop_index = 0 ; write_loop_index < 2; write_loop_index++) {
+	for (write_loop_index = 2 ; write_loop_index < 4; write_loop_index++) {
 		
 		HWDET_mWriteReg (baseaddr, write_loop_index*4, (write_loop_index+1)*READ_WRITE_MUL_FACTOR);
-
+	    xil_printf ("\nWrote to memory address %x\n", (int)baseaddr + write_loop_index*4);
 	}
 	
 	// now read back the written values and make sure they match
 
-	for (read_loop_index = 0 ; read_loop_index < 2; read_loop_index++) {
+	for (read_loop_index = 2 ; read_loop_index < 4; read_loop_index++) {
 
 		if ( HWDET_mReadReg (baseaddr, read_loop_index*4) != (read_loop_index+1)*READ_WRITE_MUL_FACTOR) {
 	    	xil_printf ("Error reading register value at address %x\n", (int)baseaddr + read_loop_index*4);

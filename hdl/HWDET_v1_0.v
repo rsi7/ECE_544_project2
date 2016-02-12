@@ -4,12 +4,11 @@
 	module HWDET_v1_0 #
 	(
 		// Users to add parameters here
-		
-		parameter integer 	CLK_FREQUENCY_HZ = 100000000,
-
+        
 		// User parameters ends
 		// Do not modify the parameters beyond this line
 
+		parameter integer 	CLK_FREQUENCY_HZ = 100000000,
 
 		// Parameters of Axi Slave Bus Interface S00_AXI
 		parameter integer C_S00_AXI_DATA_WIDTH	= 32,
@@ -17,9 +16,9 @@
 	)
 	(
 		// Users to add ports here
-
+        
         input wire		pwm_in,		        // PWM input signal from Microblaze
-	
+
 		// User ports ends
 		// Do not modify the ports beyond this line
 
@@ -51,10 +50,16 @@
 	HWDET_v1_0_S00_AXI # ( 
 		.C_S_AXI_DATA_WIDTH(C_S00_AXI_DATA_WIDTH),
 		.C_S_AXI_ADDR_WIDTH(C_S00_AXI_ADDR_WIDTH)
-	) HWDET_v1_0_S00_AXI_inst (
-	    .pwm_in(pwm_in),                               // tie S00's pwm_in port to the top-level port
-		
-		// AXI bus signals
+	) 
+	
+	HWDET_v1_0_S00_AXI_inst (
+
+        // hw_detect.v signals
+        
+        .pwm_in(pwm_in),                               // tie S00's pwm_in port to the top-level port
+
+        // AXI bus signals
+        
 		.S_AXI_ACLK(s00_axi_aclk),
 		.S_AXI_ARESETN(s00_axi_aresetn),
 		.S_AXI_AWADDR(s00_axi_awaddr),

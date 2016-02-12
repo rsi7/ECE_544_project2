@@ -39,7 +39,7 @@
 #include "platform.h"
 #include "Nexys4IO.h"
 #include "PMod544IOR2.h"
-#include "HWDET.c"
+#include "HWDET.h"
 #include "pwm_tmrctr.h"
 
 /****************************************************************************/
@@ -258,8 +258,8 @@ int main() {
 			
 			// get the switches and mask out all but the switches that determine the PWM timer frequency
 			
-			sw = NX4IO_getSwitches();
 			sw &= PWM_FREQ_MSK;
+			sw = NX4IO_getSwitches();
 
 			if (sw != oldSw) {	 
 				
@@ -332,7 +332,7 @@ int main() {
 					if (hw_switch) {
 
 						detect_freq = HWDET_calc_freq();
-						detect_duty = calc_duty(hw_high_count, hw_low_count);
+						detect_duty = HWDET_calc_duty();
 					}
 
 					else {
@@ -671,16 +671,18 @@ void FIT_Handler(void) {
 			}
 		}
 
-	// debugging counts through terminal statements every ~ 3 sec:
+	// debugging counts through terminal statements every ~ 3 sec
+	// uncomment the block below to print statements to console:
 
-	debug_count++;
+/*	debug_count++;
 
-	if (debug_count == 15000) {
+	if (debug_count == (FIT_CLOCK_FREQ_HZ * 3)) {
 
-		xil_printf("sw high count: %d \n", sw_high_count);
-		xil_printf("sw low count: %d \n\n", sw_low_count);
+		xil_printf("hw high count: %x \n", hw_high_count);
+		xil_printf("hw low count: %x \n\n", hw_low_count);
+		
 		debug_count = 0;
-	}
+	}*/
 }
 
 /****************************************************************************/

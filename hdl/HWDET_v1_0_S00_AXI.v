@@ -1,3 +1,4 @@
+
 `timescale 1 ns / 1 ps
 
 // ***************************************************************************
@@ -13,6 +14,7 @@
 // ------------
 // This is the AXI4_Lite bus interface to the hardware pulse detection module
 // written in Verilog for Project #2 of ECE 544.
+//
 // This custom peripheral instantiates the hw_detect.v module and
 // connects it to the appropriate slave registers for communication with the Microblaze.
 
@@ -40,9 +42,9 @@
 	)
 	(
 		// Users to add ports here
-
+        
         input wire		pwm_in,		        // PWM input signal from embedded system
-	   
+
 		// User ports ends
 		// Do not modify the ports beyond this line
 
@@ -389,11 +391,16 @@
 	begin
 	      // Address decoding for reading registers
 	      case ( axi_araddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] )
-	        // map the hw_detect.v outputs to the slave registers
+	      
+	      // map the hw_detect.v outputs to slave registers 0 - 1
+	      // these should be read-only registers
+	      
 	        2'h0   : reg_data_out <= high_count;
 	        2'h1   : reg_data_out <= low_count;
-            
-            // take care of remaining register and default case
+	        
+	        // keep the default settings for slave registers 2 - 3
+	        // these will be used in the self-test program
+	        
 	        2'h2   : reg_data_out <= slv_reg2;
 	        2'h3   : reg_data_out <= slv_reg3;
 	        default : reg_data_out <= 0;
@@ -420,8 +427,6 @@
 	end    
 
 	// Add user logic here
-
-    // declare user-specific signals
     
     wire    [31:0]      high_count;
     wire    [31:0]      low_count;
@@ -436,7 +441,7 @@
 
         .high_count         (high_count),       // O [31:0] how long PWM was 'high' --> send to Microblaze
         .low_count          (low_count));       // O [31:0] how long PWM was 'low' --> send to Microblaze
-        
+       
 	// User logic ends
 
 	endmodule
