@@ -17,3 +17,9 @@ $ cat .gitignore
 # ignore the ip directory
 
 /ip/*
+
+# ignore the archive directory
+# which contains zipped copies
+# for vivado and HWDET ip
+
+/archive/*
