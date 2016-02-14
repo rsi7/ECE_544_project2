@@ -895,8 +895,9 @@ void voltstostrng(float v, char* s) {
  
 void update_lcd(int vin_dccnt, short frqcnt) {
 
-	float		v;
-	char		s[10];
+	float			v;
+	char			s[10];
+	unsigned 		duty;
 
 	// update the PWM data
 
@@ -910,6 +911,10 @@ void update_lcd(int vin_dccnt, short frqcnt) {
 	// update the data
 	// ECE544 Students: Convert frequency count to 'volts'
 	// v = YOUR_FUNCTION(frqcnt);
+
+	// TSL235-R datasheet shows roughly 1:1 ratio
+	// between output freq. and irradiance
+	v = frqcnt / 100000.00;
 
 	voltstostrng(v, s);
 	PMDIO_LCD_setcursor(2, 3);
