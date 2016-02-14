@@ -26,7 +26,7 @@
 *                          	data via serial port to a PC. The step function goes from 1% duty cycle to
 *                          	99% duty cycle.  
 *
-*`		sw[1:0] = 10:		Performs a step function on the PWM duty cycle.  Monitor/Save the response
+*		sw[1:0] = 10:		Performs a step function on the PWM duty cycle.  Monitor/Save the response
 *							of the system. Press and hold the rotary encoder pushbutton to start the test.
 *                          	Release the button when the "Run" (rightmost) LED turns off to upload the 
 *                          	data via serial port to a PC. The step function goes from 99% duty cycle to
@@ -48,7 +48,8 @@
 #include <math.h>
 
 #include "xparameters.h"
-#include "xbasic_types.h"
+#include "xil_types.h"
+#include "xil_assert.h"
 #include "xtmrctr.h"
 #include "xintc.h"
 #include "xgpio.h"
@@ -70,7 +71,7 @@
 
 // GPIO parameters
 
-#define GPIO_DEVICE_ID			XPAR_XPS_GPIO_0_DEVICE_ID
+#define GPIO_DEVICE_ID			XPAR_AXI_GPIO_0_DEVICE_ID
 #define GPIO_BASEADDR			XPAR_XPS_GPIO_0_BASEADDR
 #define GPIO_HIGHADDR			XPAR_XPS_GPIO_0_HIGHADDR
 #define GPIO_INPUT_CHANNEL		1
@@ -109,11 +110,11 @@
 		
 // Interrupt Controller parameters
 
-#define INTC_DEVICE_ID			XPAR_XPS_INTC_0_DEVICE_ID
+#define INTC_DEVICE_ID			XPAR_INTC_0_DEVICE_ID
 #define INTC_BASEADDR			XPAR_AXI_INTC_0_BASEADDR
 #define INTC_HIGHADDR			XPAR_AXI_INTC_0_HIGHADDR
-#define TIMER_INTERRUPT_ID		XPAR_AXI_INTC_0_XPS_TIMER_0_INTERRUPT_INTR
-#define FIT_INTERRUPT_ID		XPAR_AXI_INTC_0_FIT_TIMER_0_INTERRUPT_INTR 
+#define TIMER_INTERRUPT_ID		XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_0_INTERRUPT_INTR
+#define FIT_INTERRUPT_ID		XPAR_MICROBLAZE_0_AXI_INTC_FIT_TIMER_0_INTERRUPT_INTR
 				
 // Fixed Interval timer - 100MHz input clock, 5KHz output clock
 // FIT_COUNT_1MSEC = FIT_CLOCK_FREQ_HZ * .001
@@ -133,8 +134,7 @@
 /****************************************************************************/
 /***************** Macros (Inline Functions) Definitions ********************/
 /****************************************************************************/
-		
-// macro functions
+
 #define MIN(a, b)  ( ((a) <= (b)) ? (a) : (b) )
 #define MAX(a, b)  ( ((a) >= (b)) ? (a) : (b) )
 
@@ -190,7 +190,7 @@ XStatus			DoTest_Characterize(void);									// Perform Characterization test
 			
 XStatus			do_init(void);												// initialize system
 void			delay_msecs(u32 msecs);										// busy-wait delay for "msecs" milliseconds
-void			voltstostrng(Xfloat32 v, char* s);							// converts volts to a string
+void			voltstostrng(float v, char* s);							// converts volts to a string
 void			update_lcd(int vin_dccnt, short vout_frqcnt);				// update LCD display
 
 void			FIT_Handler(void);											// fixed interval timer interrupt handler
@@ -201,10 +201,10 @@ void			FIT_Handler(void);											// fixed interval timer interrupt handler
 
 int main() {
 
-	XStatus 	Status;
-	u16			sw, old_sw = 0xFFFF;	
-	int			rotcnt, old_rotcnt = 0x1000;
-	Test_t		test, next_test;
+	XStatus 			Status;
+	volatile u16		sw, old_sw = 0xFFFF;
+	int					rotcnt, old_rotcnt = 0x1000;
+	Test_t				test, next_test;
 	
 	// initialize devices and set up interrupts, etc.
 
@@ -243,7 +243,7 @@ int main() {
        
     // main loop - there is no exit except by hardware reset
 
-	while (1) { 
+	while (1) {
 
 		// read sw[1:0] to get the test to perform.
 
@@ -278,14 +278,14 @@ int main() {
 
 			DoTest_Track();
 			next_test = TEST_TRACKING;
-		} // End Test0   
+
+		} // End Test 0   
 
 		// Test 1 & 2 - Step response 
 
 		else if ((sw == TEST_STEPHILO) || (sw == TEST_STEPLOHI)) {
 
-
-			Xfloat32	v;
+			float		v;
 			char		s[20];	
 			
 			// write the static info to the display if necessary
@@ -311,7 +311,6 @@ int main() {
 			// the test will write the light detector samples into the global "sample[]"
 			// the samples will be sent to stdout when the Rotary Encoder button
 			// is released
-			//
 			
 			// test whether the rotary encoder button has been pressed
 
@@ -344,7 +343,7 @@ int main() {
 
 				do {
 					delay_msecs(10);
-				} while (PMDIO_ROT_isBtnPressed());
+				} while ( PMDIO_ROT_isBtnPressed () );
 				
 				// light "Transfer" LED to indicate that data is being transmitted
 				// Show the traffic on the LCD
@@ -408,7 +407,7 @@ int main() {
 				next_test = test;
 			}
 
-		} // end Test2
+		} // end Test 1 & 2
 
 		// Test 3 - Characterize Response
 
@@ -448,7 +447,7 @@ int main() {
 
 				do {
 					delay_msecs(10);
-				} while (PMDIO_ROT_isBtnPressed());
+				} while ( PMDIO_ROT_isBtnPressed() );
 				
 				// light "Transfer" LED to indicate that data is being transmitted
 				// Show the traffic on the LCD
@@ -469,7 +468,7 @@ int main() {
 				for (smpl_idx = STEPDC_MIN; smpl_idx <= STEPDC_MAX; smpl_idx++) {
 
 					u16 		count;
-					Xfloat32	v;
+					float		v;
 					char		s[10]; 
 					
 					count = sample[smpl_idx];
@@ -504,55 +503,45 @@ int main() {
 			}
 
 		} // end Test
+	}
 
-		// outside the current test range - blink LED's and hang
+	// wait a bit and start again
 
-		else {
-			
-			// should never get here but just in case...
+	delay_msecs(100);
 
-			NX4IO_setLEDs(0x000000FF);
-			delay_msecs(2000);
-			NX4IO_setLEDs(0x00);
-		}
+}
 
-		// wait a bit and start again
-
-		delay_msecs(100);	
-
-	} 
-
-}  // end main()
-
- 
 /****************************************************************************/
 /***************************** Test Functions *******************************/
 /****************************************************************************/
 
-/*****
- * DoTest_Track() - Perform the Tracking test
- * 
- * This function uses the global "pwm_freq" and "pwm_duty" values to adjust the PWM
- * duty cycle and thus the intensity of the LED.  The function displays
- * the light detector reading as it tracks changes in the
- * LED intensity.  This test runs continuously until a different test is selected.
- * Returns XST_SUCCESS since this test can't fail.  Returns approximate sample interval
- * in the global variable "frq_sample_interval"
- *****/ 
-XStatus DoTest_Track(void)
-{
+/****************************************************************************
+* DoTest_Track() - Perform the Tracking test
+* 
+* This function uses the global "pwm_freq" and "pwm_duty" values to adjust the PWM
+* duty cycle and thus the intensity of the LED.  The function displays
+* the light detector reading as it tracks changes in the
+* LED intensity.  This test runs continuously until a different test is selected.
+* Returns XST_SUCCESS since this test can't fail.  Returns approximate sample interval
+* in the global variable "frq_sample_interval"
+*
+****************************************************************************/
+
+XStatus DoTest_Track(void) {
+
 	static int		old_pwm_freq = 0;			// old pwm_frequency and duty cycle
 	static int		old_pwm_duty = 200;			// these values will force the initial display	
 	u16				frq_cnt;					// light detector counts to display
 	XStatus			Status;						// Xilinx return status
 	unsigned		tss;						// starting timestamp			
 
-	if ((pwm_freq != old_pwm_freq) || (pwm_duty != old_pwm_duty))
-	{	
+	if ((pwm_freq != old_pwm_freq) || (pwm_duty != old_pwm_duty)) {	
+
 		// set the new PWM parameters - PWM_SetParams stops the timer
+
 		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_duty);
-		if (Status == XST_SUCCESS)
-		{							
+
+		if (Status == XST_SUCCESS) {							
 			PWM_Start(&PWMTimerInst);
 		}
 
@@ -560,23 +549,23 @@ XStatus DoTest_Track(void)
 		
 		//ECE544 Students:
         //make the light sensor measurement
-		//frq_cnt = YOUR FUNCTION HERE;
-		
+		frq_cnt = HWDET_calc_freq();
+				
 		delay_msecs(1);
 		frq_smple_interval = timestamp - tss;
 				
 		// update the display and save the frequency and duty
 		// cycle for next time
 		update_lcd(pwm_duty, frq_cnt);
+
 		old_pwm_freq = pwm_freq;
 		old_pwm_duty = pwm_duty;
 	}
+
 	return XST_SUCCESS;
 }
 
-
-
-/*****
+/****************************************************************************
  * DoTest_Step() - Perform the Step test
  * 
  * This function stabilizes the duty cycle at "dc_start" for
@@ -584,9 +573,11 @@ XStatus DoTest_Track(void)
  * max to min depending on the test. NUM_FRQ_SAMPLES are collected
  * into the global array sample[].  An approximate sample interval
  * is written to the global variable "frq_smpl_interval"
- *****/ 
-XStatus DoTest_Step(int dc_start)
-{	
+ *
+ ****************************************************************************/
+
+XStatus DoTest_Step(int dc_start) {	
+
 	XStatus		Status;					// Xilinx return status
 	unsigned	tss;					// starting timestamp
 	u16			frq_cnt;				// measured counts to display
@@ -595,6 +586,7 @@ XStatus DoTest_Step(int dc_start)
 	// starting the test
 
 	Status = PWM_SetParams(&PWMTimerInst, pwm_freq, dc_start);
+
 	if (Status == XST_SUCCESS) {							
 		PWM_Start(&PWMTimerInst);
 	}
@@ -603,7 +595,7 @@ XStatus DoTest_Step(int dc_start)
 		return XST_FAILURE;
 	}
 
-	//Wait for the LED output to settle before starting
+	// Wait for the LED output to settle before starting
 
     delay_msecs(1500);
 		
@@ -634,13 +626,11 @@ XStatus DoTest_Step(int dc_start)
 		//ECE544 Students:
         //make the light sensor measurement
 		//sample[smpl_idx++] = YOUR FUNCTION HERE;
-		
 	}		
 
 	frq_smple_interval = (timestamp - tss) / NUM_FRQ_SAMPLES;
 	return XST_SUCCESS;
 }
-	
 	
 /****************************************************************************
 *
@@ -656,19 +646,20 @@ XStatus DoTest_Step(int dc_start)
 * help limit the counts to the active range for the circuit
 *
  ****************************************************************************/
+
 XStatus DoTest_Characterize(void) {
 
 	XStatus		Status;					// Xilinx return status
 	unsigned	tss;					// starting timestamp
 	u16			frq_cnt;				// counts to display
 	int			n;						// number of samples
-	Xuint32		freq, dutyfactor;		// current frequency and duty factor
+	unsigned	freq, dutyfactor;		// current frequency and duty factor
 
 
 	// stabilize the PWM output (and thus the lamp intensity) at the
 	// minimum before starting the test
 
-	pwm_duty = PWM_STEPDC_MIN;
+	pwm_duty = STEPDC_MIN;
 	Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_duty);
 
 	if (Status == XST_SUCCESS) {							
@@ -685,11 +676,11 @@ XStatus DoTest_Characterize(void) {
 		
 	// sweep the duty cycle from STEPDC_MIN to STEPDC_MAX
 
-	smpl_idx = PWM_STEPDC_MIN;
+	smpl_idx = STEPDC_MIN;
 	n = 0;
 	tss = timestamp;
 
-	while (smpl_idx <= PWM_STEPDC_MAX) {
+	while (smpl_idx <= STEPDC_MAX) {
 
 		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, smpl_idx);
 		
@@ -704,6 +695,8 @@ XStatus DoTest_Characterize(void) {
         //ECE544 Students:
         // make the light sensor measurement
 		//sample[smpl_idx++] = YOUR FUNCTION HERE;
+
+		sample[smpl_idx++] = HWDET_calc_freq();
 		
 		n++;
 		delay_msecs(50);
@@ -735,10 +728,9 @@ XStatus DoTest_Characterize(void) {
 
 XStatus do_init(void) {
 	
-	XStatus 	Status;				// status from Xilinx Lib calls	
+	XStatus 	status;				// status from Xilinx Lib calls
 	
-	// initialize the Nexys4IO, Pmod544IO, and HWDET hardware and drivers
-	// rotary encoder is set to increment from 0 by DUTY_CYCLE_CHANGE 
+	// initialize the Nexys4IO
 	
 	status = NX4IO_initialize(NX4IO_BASEADDR);
 
@@ -746,7 +738,10 @@ XStatus do_init(void) {
 		return XST_FAILURE;
 	}
 
-	status = PMDIO_initialize(PMDIO_BASEADDR);
+	// initialize the PMod544IO
+	// rotary encoder is set to increment from 0 by DUTY_CYCLE_CHANGE 
+
+	status = PMDIO_initialize(PMD544IO_BASEADDR);
 
 	if (status != XST_SUCCESS) {
 		return XST_FAILURE;
@@ -754,6 +749,8 @@ XStatus do_init(void) {
 
  	PMDIO_ROT_init(DUTY_CYCLE_CHANGE, true);
 	PMDIO_ROT_clear();
+
+	// initialize the HWDET
 
 	status = HWDET_initialize(HWDET_BASEADDR);
 
@@ -764,9 +761,9 @@ XStatus do_init(void) {
 
 	// initialize the GPIO instance
 
-	Status = XGpio_Initialize(&GPIOInst, GPIO_DEVICE_ID);
+	status = XGpio_Initialize(&GPIOInst, GPIO_DEVICE_ID);
 	
-	if (Status != XST_SUCCESS) {
+	if (status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
@@ -780,25 +777,25 @@ XStatus do_init(void) {
 	// initialize the PWM timer/counter instance but do not start it
 	// do not enable PWM interrupts. Clock frequency is the AXI clock frequency
 
-	Status = PWM_Initialize(&PWMTimerInst, PWM_TIMER_DEVICE_ID, false);
+	status = PWM_Initialize(&PWMTimerInst, PWM_TIMER_DEVICE_ID, false, CPU_CLOCK_FREQ_HZ);
 	
-	if (Status != XST_SUCCESS) {
+	if (status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 	
 	// initialize the interrupt controller
 
-	Status = XIntc_Initialize(&IntrptCtlrInst,INTC_DEVICE_ID);
+	status = XIntc_Initialize(&IntrptCtlrInst,INTC_DEVICE_ID);
     
-    if (Status != XST_SUCCESS) {
+    if (status != XST_SUCCESS) {
        return XST_FAILURE;
     }
 
 	// connect the fixed interval timer (FIT) handler to the interrupt
     
-    Status = XIntc_Connect(&IntrptCtlrInst, FIT_INTERRUPT_ID, (XInterruptHandler)FIT_Handler, (void *)0);
+    status = XIntc_Connect(&IntrptCtlrInst, FIT_INTERRUPT_ID, (XInterruptHandler)FIT_Handler, (void *)0);
 
-    if (Status != XST_SUCCESS) {
+    if (status != XST_SUCCESS) {
         return XST_FAILURE;
     }
  
@@ -806,9 +803,9 @@ XStatus do_init(void) {
 	// all devices that cause interrupts, specifically real mode so that
 	// the the  FIT can cause interrupts thru the interrupt controller.
 
-    Status = XIntc_Start(&IntrptCtlrInst, XIN_REAL_MODE);
+    status = XIntc_Start(&IntrptCtlrInst, XIN_REAL_MODE);
 
-    if (Status != XST_SUCCESS) {
+    if (status != XST_SUCCESS) {
         return XST_FAILURE;
     } 
       
@@ -847,7 +844,6 @@ void delay_msecs(u32 msecs) {
 	}
 }
 
-
 /****************************************************************************
  * voltstostrng() - converts volts to a fixed format string
  * 
@@ -861,46 +857,45 @@ void delay_msecs(u32 msecs) {
  *	
  ****************************************************************************/
  
- void	voltstostrng(Xfloat32 v, char* s) {
+void voltstostrng(float v, char* s) {
 
-	Xfloat32	dpf, ipf;
-	Xuint32		dpi;	
-	Xuint32		ones, tenths, hundredths;
+	float		dpf, ipf;
+	int			dpi;
+	int			ones, tenths, hundredths;
 
-	 // form the fixed digits
+	// form the fixed digits
 
-	 dpf = modff(v, &ipf);
-	 dpi = dpf * 100;
-	 ones = abs(ipf) + '0';
-	 tenths = (dpi / 10) + '0';
-	 hundredths = (dpi - ((tenths - '0') * 10)) + '0';
+	dpf = modff(v, &ipf);
+	dpi = dpf * 100;
+	ones = abs(ipf) + '0';
+	tenths = (dpi / 10) + '0';
+	hundredths = (dpi - ((tenths - '0') * 10)) + '0';
 	 
-	 // form the string and return
+	// form the string and return
 
-	 *s++ = ipf == 0 ? ' ' : (ipf > 0 ? '+' : '-');
-	 *s++ = (char) ones;
-	 *s++ = '.';
-	 *s++ = (char) tenths;
-	 *s++ = (char) hundredths;
-	 *s   = 0;
+	*s++ = ipf == 0 ? ' ' : (ipf > 0 ? '+' : '-');
+	*s++ = (char) ones;
+	*s++ = '.';
+	*s++ = (char) tenths;
+	*s++ = (char) hundredths;
+	*s   = 0;
 
-	 return;
- }
-	  
+	return ;
+}  
 	 
- /****************************************************************************
-  * update_lcd() - update the LCD display with a new count and voltage
-  *
-  * writes the display with new information.  "vin_dccnt" is the  unsigned PWM duty
-  * cycle and "frqcnt" is the signed frq_count.  The function assumes that the
-  * static portion of the display has been written and that the dynamic portion of
-  * the display is the same for all tests
-  *
-  ****************************************************************************/
+/****************************************************************************
+* update_lcd() - update the LCD display with a new count and voltage
+*
+* writes the display with new information.  "vin_dccnt" is the  unsigned PWM duty
+* cycle and "frqcnt" is the signed frq_count.  The function assumes that the
+* static portion of the display has been written and that the dynamic portion of
+* the display is the same for all tests
+*
+****************************************************************************/
  
- void update_lcd(int vin_dccnt, short frqcnt) {
+void update_lcd(int vin_dccnt, short frqcnt) {
 
-	Xfloat32	v;
+	float		v;
 	char		s[10];
 
 	// update the PWM data
@@ -926,9 +921,8 @@ void delay_msecs(u32 msecs) {
 	PMDIO_LCD_setcursor(2, 11);
 	PMDIO_LCD_putnum(frqcnt, 10);
 
-	return;
- }
-
+	return ;
+}
 
 /****************************************************************************/
 /*************************** Interrupt Handlers *****************************/
@@ -955,3 +949,58 @@ void FIT_Handler(void) {
 		ts_interval = 1;
 	}
 }
+
+/****************************************************************************
+ * Test_BangBang() - On/off control loop algorithm
+ *  
+ * 
+ ****************************************************************************/
+
+/*void Test_BangBang(void) {
+
+	signed int setpoint = 100;		// setpoint is 100 somethings
+	signed int pwm_fullon = 99;		// PWM in %(duty cycle) --> this is full 'on'
+	signed int pwm_fulloff = 1;		// PWM in %(duty cycle) --> this is full 'off'
+
+	// stabilize the PWM output (and thus the lamp intensity) at the
+	// minimum before starting the test
+
+	pwm_duty = PWM_STEPDC_MIN;
+	Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_duty);
+
+	if (Status == XST_SUCCESS) {							
+		PWM_Start(&PWMTimerInst);
+	}
+
+	else {
+		return -1;
+	}
+
+	//Wait for the LED output to settle before starting
+
+    delay_msecs(1500);
+
+	sensor_value = HWDET_calc_freq();		// read the sensor
+
+	if (sensor_value < setpoint) {
+
+		// turn the duty cycle on to full 'on' (99%)
+
+		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_fullon);
+
+		if (Status == XST_SUCCESS) {							
+			PWM_Start(&PWMTimerInst);
+		}
+	}
+
+	else {
+
+		// turn the duty cycle on to full 'off' (1%)
+		
+		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_fulloff);
+
+		if (Status == XST_SUCCESS) {							
+			PWM_Start(&PWMTimerInst);
+		}
+	}
+}*/
