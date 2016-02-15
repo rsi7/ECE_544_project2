@@ -184,16 +184,17 @@ int						debugen = 0;				// debug level/flag
 /************************** Function Prototypes *****************************/
 /****************************************************************************/
 
-XStatus 		DoTest_Track(void);											// Perform Tracking test
-XStatus			DoTest_Step(int dc_start);									// Perform Step test
-XStatus			DoTest_Characterize(void);									// Perform Characterization test
+XStatus 		DoTest_Track(void);										// Perform Tracking test
+XStatus			DoTest_Step(int dc_start);								// Perform Step test
+XStatus			DoTest_Characterize(void);								// Perform Characterization test
 			
-XStatus			do_init(void);												// initialize system
-void			delay_msecs(u32 msecs);										// busy-wait delay for "msecs" milliseconds
+XStatus			do_init(void);											// initialize system
+void			delay_msecs(u32 msecs);									// busy-wait delay for "msecs" milliseconds
 void			voltstostrng(float v, char* s);							// converts volts to a string
-void			update_lcd(int vin_dccnt, short vout_frqcnt);				// update LCD display
+void			update_lcd(int vin_dccnt, short vout_frqcnt);			// update LCD display
+float 			freq2volt(short freq); 									// converts HWDET frequency into applied voltage
 
-void			FIT_Handler(void);											// fixed interval timer interrupt handler
+void			FIT_Handler(void);										// fixed interval timer interrupt handler
 
 /****************************************************************************/
 /************************** MAIN PROGRAM ************************************/
@@ -382,7 +383,7 @@ int main() {
 					//ECE544 Students:
                     //Convert from count to 'volts'
                     //v = YOUR_FUNCTION(count);
-					v = (count / 4) * 0.01 * PWM_VIN;
+					v = freq2volt(count);
 
 					voltstostrng(v, s);
 					xil_printf("%d\t%d\t%s\n\r", smpl_idx, count, s);
@@ -478,7 +479,7 @@ int main() {
 					//ECE544 Students:
                     //Convert from count to 'volts'
                     //v = YOUR_FUNCTION(count);
-					v = (count / 4) * PWM_VIN * 0.01;
+					v = freq2volt(count);
 
 					voltstostrng(v, s);
 					xil_printf("%d\t%d\t%s\n\r", smpl_idx, count, s);
@@ -589,7 +590,7 @@ XStatus DoTest_Step(int dc_start) {
 
 	XStatus		Status;					// Xilinx return status
 	unsigned	tss;					// starting timestamp
-	u16			frq_cnt;				// measured counts to display
+	unsigned 	read1, read2; 			// temporary variables to hold HWDET reads
 		
 	// stabilize the PWM output (and thus the lamp intensity) before
 	// starting the test
@@ -635,7 +636,10 @@ XStatus DoTest_Step(int dc_start) {
 		//ECE544 Students:
         //make the light sensor measurement
 		//sample[smpl_idx++] = YOUR FUNCTION HERE;
-		sample[smpl_idx++] = HWDET_calc_freq();
+		read1 = HWDET_calc_freq();
+		delay_msecs(1);
+		read2 = HWDET_calc_freq();
+		sample[smpl_idx++] = MAX(read1, read2);
 	}		
 
 	frq_smple_interval = (timestamp - tss) / NUM_FRQ_SAMPLES;
@@ -661,9 +665,7 @@ XStatus DoTest_Characterize(void) {
 
 	XStatus		Status;					// Xilinx return status
 	unsigned	tss;					// starting timestamp
-	u16			frq_cnt;				// counts to display
 	int			n;						// number of samples
-	unsigned	freq, dutyfactor;		// current frequency and duty factor
 	unsigned 	read1, read2;			// temporary variables to hold HWDET reads
 
 
@@ -913,7 +915,6 @@ void update_lcd(int vin_dccnt, short frqcnt) {
 
 	float			v;
 	char			s[10];
-	unsigned 		duty;
 
 	// update the PWM data
 
@@ -928,9 +929,7 @@ void update_lcd(int vin_dccnt, short frqcnt) {
 	// ECE544 Students: Convert frequency count to 'volts'
 	// v = YOUR_FUNCTION(frqcnt);
 
-	// characterization graph shows ~4x freq:duty trendline
-
-	v = (frqcnt / 4) * 0.01 * PWM_VIN;
+	v = freq2volt(frqcnt);
 
 	voltstostrng(v, s);
 	PMDIO_LCD_setcursor(2, 3);
@@ -944,6 +943,22 @@ void update_lcd(int vin_dccnt, short frqcnt) {
 
 	return ;
 }
+
+/****************************************************************************
+* freq2volt - Converts detected frequency into an estimated applied voltage
+* Based on linear equation derived from characterization curve...
+* y = 3.92x + 10.1
+****************************************************************************/
+
+float freq2volt(short freq) {
+
+ 	float 			v;
+ 	unsigned int 	duty_int;
+
+ 	duty_int = ((freq - 10) / 4);
+ 	v = duty_int * 0.01 * PWM_VIN;
+ 	return v;
+ }
 
 /****************************************************************************/
 /*************************** Interrupt Handlers *****************************/
