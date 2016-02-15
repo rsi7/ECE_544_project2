@@ -63,7 +63,10 @@ module n4fpga (
 
     output	[7:0] 		JA,		                // PmodCLP data bus (both rows used)
     output	[7:0] 		JB,				        // PmodCLP control signals (bottom row only)
-    output	[7:0] 		JC,                     // debug signals (bottom row only)
+
+    input               pwm_in,                 // input signal from light sensor
+    output              pwm_out,                // output signal going to transistor base
+
 	input	[7:0]		JD);                    // PmodENC signals
 
     /******************************************************************/
@@ -95,8 +98,6 @@ module n4fpga (
     wire	[7:0]	    gpio_in;				// GPIO input port for EMBSYS
     wire	[7:0]	    gpio_out;				// GPIO output port for EMBSYS
 
-    wire                pwm_out;                // AXI Timer PWM --> GPIO input
-
     /******************************************************************/
     /* Global Assignments                                             */
     /******************************************************************/
@@ -107,7 +108,7 @@ module n4fpga (
     assign sysreset_n = btnCpuReset;        // active-low reset signal for Microblaze
     assign sysreset = ~sysreset_n;          // active-high reset signal for any logic blocks
 
-    // 20kHz signal from FIT interrupt routine (used for debugging)
+    // 5kHz signal from FIT interrupt routine (used for debugging)
 
     wire   clk_5khz;
     assign clk_5khz = gpio_out[0];
@@ -122,7 +123,6 @@ module n4fpga (
 
     assign JA = lcd_d[7:0];                                                     // 8-bit data bus (both rows used)
     assign JB = {1'b0, lcd_e, lcd_rw, lcd_rs, 2'b00, clk_5khz, pwm_out};       	// control signals (bottom row only)
-    assign JC = {lcd_e, lcd_rs, lcd_rw, 1'b0, lcd_d[3:0]};                      // debug signals (bottom row only)
 
     // input rotary signals from port JD
 
@@ -198,6 +198,6 @@ module n4fpga (
         // Connections with AXI Timer
 
         .pwm0                       (pwm_out),         	// O [ 0 ] AXI Timer's PWM output signal
-		.pwm_in 					(pwm_out));			// I [ 0 ] HWDET module's PWM input
+		.pwm_in 					(pwm_in));	      	// I [ 0 ] HWDET module's PWM input
 
 endmodule

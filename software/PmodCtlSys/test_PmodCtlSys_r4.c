@@ -238,8 +238,9 @@ int main() {
 
 	// Run the LED characterization routine to establish sensor min's and max's
 
-    DoTest_Characterize();
+    // DoTest_Characterize();
 	NX4IO_setLEDs(0x00000000);
+
        
     // main loop - there is no exit except by hardware reset
 
@@ -381,7 +382,8 @@ int main() {
 					//ECE544 Students:
                     //Convert from count to 'volts'
                     //v = YOUR_FUNCTION(count);
-					
+					v = (count / 4) * 0.01 * PWM_VIN;
+
 					voltstostrng(v, s);
 					xil_printf("%d\t%d\t%s\n\r", smpl_idx, count, s);
 					
@@ -476,7 +478,8 @@ int main() {
 					//ECE544 Students:
                     //Convert from count to 'volts'
                     //v = YOUR_FUNCTION(count);
-					
+					v = (count / 4) * PWM_VIN * 0.01;
+
 					voltstostrng(v, s);
 					xil_printf("%d\t%d\t%s\n\r", smpl_idx, count, s);
 
@@ -533,7 +536,8 @@ XStatus DoTest_Track(void) {
 	static int		old_pwm_duty = 200;			// these values will force the initial display	
 	u16				frq_cnt;					// light detector counts to display
 	XStatus			Status;						// Xilinx return status
-	unsigned		tss;						// starting timestamp			
+	unsigned		tss;						// starting timestamp
+	unsigned 		read1, read2; 				// temporary variables to hold HWDET reads			
 
 	if ((pwm_freq != old_pwm_freq) || (pwm_duty != old_pwm_duty)) {	
 
@@ -549,9 +553,14 @@ XStatus DoTest_Track(void) {
 		
 		//ECE544 Students:
         //make the light sensor measurement
-		frq_cnt = HWDET_calc_freq();
-				
-		delay_msecs(1);
+		
+		delay_msecs(50);
+		read1 = HWDET_calc_freq();
+		delay_msecs(50);
+		read2 = HWDET_calc_freq();
+
+		frq_cnt = MAX(read1, read2);
+
 		frq_smple_interval = timestamp - tss;
 				
 		// update the display and save the frequency and duty
@@ -626,6 +635,7 @@ XStatus DoTest_Step(int dc_start) {
 		//ECE544 Students:
         //make the light sensor measurement
 		//sample[smpl_idx++] = YOUR FUNCTION HERE;
+		sample[smpl_idx++] = HWDET_calc_freq();
 	}		
 
 	frq_smple_interval = (timestamp - tss) / NUM_FRQ_SAMPLES;
@@ -654,6 +664,7 @@ XStatus DoTest_Characterize(void) {
 	u16			frq_cnt;				// counts to display
 	int			n;						// number of samples
 	unsigned	freq, dutyfactor;		// current frequency and duty factor
+	unsigned 	read1, read2;			// temporary variables to hold HWDET reads
 
 
 	// stabilize the PWM output (and thus the lamp intensity) at the
@@ -695,11 +706,16 @@ XStatus DoTest_Characterize(void) {
         //ECE544 Students:
         // make the light sensor measurement
 		//sample[smpl_idx++] = YOUR FUNCTION HERE;
+		
+		delay_msecs(50);
 
-		sample[smpl_idx++] = HWDET_calc_freq();
+		read1 = HWDET_calc_freq();
+		delay_msecs(50);
+		read2 = HWDET_calc_freq();
+
+		sample[smpl_idx++] = MAX(read1, read2);
 		
 		n++;
-		delay_msecs(50);
 	}		
 
 	frq_smple_interval = (timestamp - tss) / smpl_idx;
@@ -912,9 +928,9 @@ void update_lcd(int vin_dccnt, short frqcnt) {
 	// ECE544 Students: Convert frequency count to 'volts'
 	// v = YOUR_FUNCTION(frqcnt);
 
-	// TSL235-R datasheet shows roughly 1:1 ratio
-	// between output freq. and irradiance
-	v = frqcnt / 100000.00;
+	// characterization graph shows ~4x freq:duty trendline
+
+	v = (frqcnt / 4) * 0.01 * PWM_VIN;
 
 	voltstostrng(v, s);
 	PMDIO_LCD_setcursor(2, 3);
