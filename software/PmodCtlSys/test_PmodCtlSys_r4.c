@@ -142,7 +142,7 @@
 /*************************** Typdefs & Structures ***************************/
 /****************************************************************************/
 	
-typedef enum {TEST_TRACKING = 0x0, TEST_STEPLOHI = 0x01, TEST_STEPHILO = 0x02, 
+typedef enum {TEST_BANGBANG = 0x0, TEST_STEPLOHI = 0x01, TEST_STEPHILO = 0x02, 
 				TEST_CHARACTERIZE = 0x03, TEST_INVALID = 0xFF} Test_t;
 
 /****************************************************************************/
@@ -190,6 +190,7 @@ int						debugen = 0;				// debug level/flag
 XStatus 		DoTest_Track(void);										// Perform Tracking test
 XStatus			DoTest_Step(int dc_start);								// Perform Step test
 XStatus			DoTest_Characterize(void);								// Perform Characterization test
+XStatus 		DoTest_BangBang(unsigned int setpoint);					// Perform bang-bang control test
 			
 XStatus			do_init(void);											// initialize system
 void			delay_msecs(u32 msecs);									// busy-wait delay for "msecs" milliseconds
@@ -254,63 +255,39 @@ int main() {
 
 		sw = NX4IO_getSwitches() & 0x03;		
 		
-		// Test 0 = Track PWM voltage
+		// Test 0 = Bang Bang Control
 		
-		if (sw == TEST_TRACKING) {
+		if (sw == TEST_BANGBANG) {
 
-			// write the static info to display if necessary
-
-			if (sw != next_test) {
-
-				PMDIO_LCD_clrd();
-				PMDIO_LCD_setcursor(1,0);
-				PMDIO_LCD_wrstring("| TRK| Vi: sx.xx");
-				PMDIO_LCD_setcursor(2,0);
-				PMDIO_LCD_wrstring("Vo:sx.xx C:sxxxx");
-			}
-				 						
-			// read rotary count and handle duty cycle changes
-			// limit duty cycle to between STEPDC_MIN and STEPDC_MAX
-			// PWM frequency does not change in this test
-
-			PMDIO_ROT_readRotcnt(&rotcnt);
-
-			if (rotcnt != old_rotcnt) {
-
-				pwm_duty = MAX(STEPDC_MIN, MIN(rotcnt, STEPDC_MAX));
-				old_rotcnt = rotcnt;
-			}
-
-			DoTest_Track();
-			next_test = TEST_TRACKING;
-
-		} // End Test 0   
-
-		// Test 1 & 2 - Step response 
-
-		else if ((sw == TEST_STEPHILO) || (sw == TEST_STEPLOHI)) {
-
-			float		v;
-			char		s[20];	
+			float			v;
+			char			s[20];	
+			unsigned int 	setpoint;
 			
 			// write the static info to the display if necessary
 
-			if (sw != next_test) {
+			PMDIO_LCD_clrd();
+			PMDIO_LCD_setcursor(1,0);
+			PMDIO_LCD_wrstring("|BANG|Press RBtn");
+			PMDIO_LCD_setcursor(2,0);
+			PMDIO_LCD_wrstring("SetPt:");
 
-				if (sw == TEST_STEPHILO) {
-					strcpy(s, "|HILO|Press RBtn");
-				}
+			// read the rotary encoder for target value
+			PMDIO_ROT_readRotcnt(&rotcnt);
 
-				else {
-					strcpy(s, "|LOHI|Press RBtn");
-				}
-				
-				PMDIO_LCD_clrd();
-				PMDIO_LCD_setcursor(1,0);
-				PMDIO_LCD_wrstring(s);
-				PMDIO_LCD_setcursor(2,0);
-				PMDIO_LCD_wrstring("LED OFF-Release ");
-			}
+			// map the rotary reading to appropriate range
+			// based on minimum & maximum frequency counts
+			setpoint = MAX(FRQ_min_cnt, MIN(rotcnt, FRQ_max_cnt));
+
+			// convert this to voltage to display on LCD
+			v = freq2volt(setpoint);
+			voltstostrng(v, s);
+
+			// display on LCD screen				
+			PMDIO_LCD_setcursor(2,6);
+			PMDIO_LCD_wrstring(s);
+
+			// debugging on 7-segment
+			NX4IO_SSEG_putU32Dec(setpoint, 1);	
 			
 			// start the test on the rising edge of the Rotary Encoder button press
 			// the test will write the light detector samples into the global "sample[]"
@@ -329,17 +306,9 @@ int main() {
 
 				NX4IO_setLEDs(0x00000001);
 
-				// perform High --> Low step test
+				// perform bang-bang control test
 
-				if (sw == TEST_STEPHILO) {				
-					DoTest_Step(STEPDC_MAX);
-				}
-
-				// perform Low --> High step
-
-				else {
-					DoTest_Step(STEPDC_MIN);
-				}
+				DoTest_BangBang(setpoint);
 
 				NX4IO_setLEDs(0x00000000);
 				
@@ -361,15 +330,9 @@ int main() {
 				PMDIO_LCD_wrstring("S:    DATA:     ");
 
 				// print the descriptive heading followed by the data
-
-				if (sw == TEST_STEPHILO) {
-					xil_printf("\n\rHigh --> Low Test Data\t\tAppx. Sample Interval: %d msec\n\r", frq_smple_interval);
-				}
-
-				else {
-					xil_printf("\n\rLow --> High Test Data\t\tAppx. Sample Interval: %d msec\n\r", frq_smple_interval);
-				}
 				
+				xil_printf("\n\rBang-Bang Test Data\t\tAppx. Sample Interval: %d msec\n\r", frq_smple_interval);
+
 				// trigger the serial charter program
 
 				xil_printf("===STARTPLOT===\n");
@@ -410,23 +373,21 @@ int main() {
 			}
 
 			else {
-				next_test = test;
+				next_test = test;		
 			}
 
-		} // end Test 1 & 2
+		} // end Bang-Bang test
+
 
 		// Test 3 - Characterize Response
 
 		else if (sw == TEST_CHARACTERIZE) {
 
-			if (sw != next_test) {
-
-				PMDIO_LCD_clrd();
-				PMDIO_LCD_setcursor(1,0);
-				PMDIO_LCD_wrstring("|CHAR|Press RBtn");
-				PMDIO_LCD_setcursor(2,0);
-				PMDIO_LCD_wrstring("LED OFF-Release ");
-			}
+			PMDIO_LCD_clrd();
+			PMDIO_LCD_setcursor(1,0);
+			PMDIO_LCD_wrstring("|CHAR|Press RBtn");
+			PMDIO_LCD_setcursor(2,0);
+			PMDIO_LCD_wrstring("LED OFF-Release ");
 
 			// start the test on the rising edge of the Rotary Encoder button press
 			// the test will write the samples into the global "sample[]"
@@ -509,7 +470,7 @@ int main() {
 				next_test = test;
 			}
 
-		} // end Test
+		} // end Characterize test
 	}
 
 	// wait a bit and start again
@@ -948,7 +909,6 @@ float freq2volt(short freq) {
 
  	float 			v;
  	signed int 		freq_signed;
- 	float 			duty_temp;
 
  	freq_signed = freq;
 
@@ -988,7 +948,7 @@ void FIT_Handler(void) {
 }
 
 /****************************************************************************
- * Test_BangBang() - On/off control loop algorithm
+ * DoTest_BangBang() - On/off control loop algorithm
  *  
  * 
  ****************************************************************************/
