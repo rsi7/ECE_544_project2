@@ -231,11 +231,11 @@ int main() {
 	sPID * testPIDptr = malloc(sizeof(sPID));
 
 	testPIDptr->pGain 	= 5;
-	testPIDptr->iGain 	= 0; 		
+	testPIDptr->iGain 	= 5; 		
 	testPIDptr->dGain 	= 5; 		
 	testPIDptr->iState 	= 0;
 	testPIDptr->dState 	= 0; 		
-	testPIDptr->iMin 	= 0; 		
+	testPIDptr->iMin 	= -10; 		
 	testPIDptr->iMax 	= 10; 
 	
 	// initialize devices and set up interrupts, etc.
@@ -1256,16 +1256,16 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 
 		// Intergral term
 		
-		// // only accumulate within +/- 6% of target value
+		// only accumulate within +/- 6% of target value
 
-		// PID->iState = (error < (setpoint / 16)) ? ((PID->iState) + error) : (PID->iState);
+		PID->iState = (abs(error) < (setpoint / 16)) ? ((PID->iState) + error) : (PID->iState);
 
 		// // bound it to maximum/minimum values
 
-		// PID->iState = ((PID->iState) > (PID->iMax)) ? (PID->iMax) : (PID->iState);
-		// PID->iState = ((PID->iState) < (PID->iMin)) ? (PID->iMin) : (PID->iState);
+		PID->iState = ((PID->iState) > (PID->iMax)) ? (PID->iMax) : (PID->iState);
+		PID->iState = ((PID->iState) < (PID->iMin)) ? (PID->iMin) : (PID->iState);
 
-		// iTerm = (PID->iGain) * (PID->iState);
+		iTerm = (PID->iGain) * (PID->iState);
 
 		// Derivative term
 
@@ -1275,7 +1275,7 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 		// PID sum converted to applied duty cycle
 		// making sure to bound to 1%-99% range
 
-		pwm_duty = pTerm + dTerm;
+		pwm_duty = pTerm + iTerm + dTerm;
 		pwm_duty = MAX(STEPDC_MIN, MIN(pwm_duty, STEPDC_MAX));
 
 		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_duty);
