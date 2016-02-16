@@ -172,6 +172,9 @@ int						frq_smple_interval;			// approximate sample interval
 int						pwm_freq;					// PWM frequency 
 int						pwm_duty;					// PWM duty cycle
 
+signed int 				FRQ_min_cnt;				// minimum freq value when duty = 1%
+signed int 				FRQ_max_cnt;				// maximum freq value when duty = 99%
+
 // Light Sensor Peripheral parameters
 // Add whatever global variables you need to use your Light Sensor peripheral driver
 
@@ -511,7 +514,7 @@ int main() {
 
 	// wait a bit and start again
 
-	delay_msecs(100);
+	delay_msecs(20);
 
 }
 
@@ -538,7 +541,6 @@ XStatus DoTest_Track(void) {
 	u16				frq_cnt;					// light detector counts to display
 	XStatus			Status;						// Xilinx return status
 	unsigned		tss;						// starting timestamp
-	unsigned 		read1, read2; 				// temporary variables to hold HWDET reads			
 
 	if ((pwm_freq != old_pwm_freq) || (pwm_duty != old_pwm_duty)) {	
 
@@ -555,17 +557,15 @@ XStatus DoTest_Track(void) {
 		//ECE544 Students:
         //make the light sensor measurement
 		
-		delay_msecs(50);
-		read1 = HWDET_calc_freq();
-		delay_msecs(50);
-		read2 = HWDET_calc_freq();
+		delay_msecs(10);
 
-		frq_cnt = MAX(read1, read2);
+		frq_cnt = HWDET_calc_freq();
 
 		frq_smple_interval = timestamp - tss;
 				
 		// update the display and save the frequency and duty
 		// cycle for next time
+
 		update_lcd(pwm_duty, frq_cnt);
 
 		old_pwm_freq = pwm_freq;
@@ -590,7 +590,6 @@ XStatus DoTest_Step(int dc_start) {
 
 	XStatus		Status;					// Xilinx return status
 	unsigned	tss;					// starting timestamp
-	unsigned 	read1, read2; 			// temporary variables to hold HWDET reads
 		
 	// stabilize the PWM output (and thus the lamp intensity) before
 	// starting the test
@@ -636,10 +635,9 @@ XStatus DoTest_Step(int dc_start) {
 		//ECE544 Students:
         //make the light sensor measurement
 		//sample[smpl_idx++] = YOUR FUNCTION HERE;
-		read1 = HWDET_calc_freq();
+
+		sample[smpl_idx++] = HWDET_calc_freq();
 		delay_msecs(1);
-		read2 = HWDET_calc_freq();
-		sample[smpl_idx++] = MAX(read1, read2);
 	}		
 
 	frq_smple_interval = (timestamp - tss) / NUM_FRQ_SAMPLES;
@@ -666,8 +664,6 @@ XStatus DoTest_Characterize(void) {
 	XStatus		Status;					// Xilinx return status
 	unsigned	tss;					// starting timestamp
 	int			n;						// number of samples
-	unsigned 	read1, read2;			// temporary variables to hold HWDET reads
-
 
 	// stabilize the PWM output (and thus the lamp intensity) at the
 	// minimum before starting the test
@@ -711,11 +707,7 @@ XStatus DoTest_Characterize(void) {
 		
 		delay_msecs(50);
 
-		read1 = HWDET_calc_freq();
-		delay_msecs(50);
-		read2 = HWDET_calc_freq();
-
-		sample[smpl_idx++] = MAX(read1, read2);
+		sample[smpl_idx++] = HWDET_calc_freq();
 		
 		n++;
 	}		
@@ -729,6 +721,9 @@ XStatus DoTest_Characterize(void) {
     // FRQ_min_cnt = ?
 	// YOUR_FUNCTION(FRQ_min_cnt,FRQ_max_cnt);
 	
+	FRQ_min_cnt = sample[STEPDC_MIN];
+	FRQ_max_cnt = sample[STEPDC_MAX];
+
     return n;
 }
 	
@@ -947,17 +942,23 @@ void update_lcd(int vin_dccnt, short frqcnt) {
 /****************************************************************************
 * freq2volt - Converts detected frequency into an estimated applied voltage
 * Based on linear equation derived from characterization curve...
-* y = 3.92x + 10.1
 ****************************************************************************/
 
 float freq2volt(short freq) {
 
  	float 			v;
- 	unsigned int 	duty_int;
+ 	signed int 		freq_signed;
+ 	float 			duty_temp;
 
- 	duty_int = ((freq - 10) / 4);
- 	v = duty_int * 0.01 * PWM_VIN;
- 	return v;
+ 	freq_signed = freq;
+
+ 	// calculate the voltage
+ 	// by scaling to get duty cycle (temporary sum)
+ 	// then multiplying it by +3.3V
+
+ 	v = PWM_VIN * ((float) (freq_signed - FRQ_min_cnt) / (float) (FRQ_max_cnt - FRQ_min_cnt));
+
+  	return v;
  }
 
 /****************************************************************************/
@@ -992,51 +993,84 @@ void FIT_Handler(void) {
  * 
  ****************************************************************************/
 
-/*void Test_BangBang(void) {
+XStatus DoTest_BangBang(unsigned int setpoint) {
 
-	signed int setpoint = 100;		// setpoint is 100 somethings
-	signed int pwm_fullon = 99;		// PWM in %(duty cycle) --> this is full 'on'
-	signed int pwm_fulloff = 1;		// PWM in %(duty cycle) --> this is full 'off'
+	XStatus		Status;					// Xilinx return status
+	unsigned	tss;					// starting timestamp
+	unsigned 	sensor_value;			// frequency count from sensor [10, 400]
+		
+	// stabilize the PWM output (and thus the lamp intensity) before test
+	// if setpoint is higher than halfway point --> set initial voltage to 0.0V
+	// if setpoint is lower than halway point --> set initial voltage to +3.3V
 
-	// stabilize the PWM output (and thus the lamp intensity) at the
-	// minimum before starting the test
+	if (setpoint > STEPDC_MAX / 2) {
+		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, STEPDC_MIN);
+	}
 
-	pwm_duty = PWM_STEPDC_MIN;
-	Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_duty);
+	else {
+		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, STEPDC_MAX);
+	}
 
-	if (Status == XST_SUCCESS) {							
+	// start the PWM now (hopefully)...
+
+	if (Status == XST_SUCCESS) {
 		PWM_Start(&PWMTimerInst);
 	}
 
 	else {
-		return -1;
+		xil_printf("Died trying to initialize PWM for test...");
+		return XST_FAILURE;
 	}
 
-	//Wait for the LED output to settle before starting
+	// wait for LED output to settle before starting
 
-    delay_msecs(1500);
+	delay_msecs(1500);
 
-	sensor_value = HWDET_calc_freq();		// read the sensor
+	// time to run the test & collect data
 
-	if (sensor_value < setpoint) {
+	smpl_idx = 0;
+	tss = timestamp;
 
-		// turn the duty cycle on to full 'on' (99%)
+	while (smpl_idx < NUM_FRQ_SAMPLES) {
 
-		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_fullon);
+		// light sensor measurement using HWDET...
+		// store values in global array sample[ ]
+		// also, increment the sample index
 
-		if (Status == XST_SUCCESS) {							
+		sensor_value = HWDET_calc_freq();
+		sample[smpl_idx++] = sensor_value;
+
+		// bang-bang control algorithm
+		// use ternary operator to choose between [1,99] for new pwm_duty
+		// based on whether sensor reading is higher/lower than setpoint
+
+		pwm_duty = sensor_value > setpoint ? STEPDC_MIN : STEPDC_MAX;
+
+		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_duty);
+
+		// make sure new pwm_duty updated correctly...
+
+		if (Status == XST_SUCCESS) {
 			PWM_Start(&PWMTimerInst);
 		}
-	}
 
-	else {
-
-		// turn the duty cycle on to full 'off' (1%)
-		
-		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_fulloff);
-
-		if (Status == XST_SUCCESS) {							
-			PWM_Start(&PWMTimerInst);
+		else {
+			xil_printf("Died while updating pwm_duty to %d...", pwm_duty);
+			return XST_FAILURE;
 		}
-	}
-}*/
+
+		// arbitrary delay to make the routine run smoother...
+
+		delay_msecs(1);
+	}		
+
+	// all samples collected and loop is finished...
+	// measure sample time interval by subtracting timestamps
+
+	frq_smple_interval = (timestamp - tss) / NUM_FRQ_SAMPLES;
+
+	// mission accomplished... return to caller
+
+	return XST_SUCCESS;	
+
+}

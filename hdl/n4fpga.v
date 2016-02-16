@@ -98,6 +98,13 @@ module n4fpga (
     wire	[7:0]	    gpio_in;				// GPIO input port for EMBSYS
     wire	[7:0]	    gpio_out;				// GPIO output port for EMBSYS
 
+    // signals for 3-stage synchronizer
+
+    reg                sync_reg1;
+    reg                sync_reg2;
+    reg                sync_reg3;
+    wire               HWDET_in;
+
     /******************************************************************/
     /* Global Assignments                                             */
     /******************************************************************/
@@ -134,6 +141,25 @@ module n4fpga (
     // wrap the pwm_out from the timer back to the application for software pulse-width detect
 
     assign gpio_in = {7'b0000000, pwm_out};
+
+    /******************************************************************/
+    /* 3-stage synchronizer                                           */
+    /******************************************************************/    
+
+    always@(posedge sysclk) begin
+
+        if (!sysreset_n) begin
+            sync_reg1 <= 1'b0;
+            sync_reg2 <= 1'b0;
+            sync_reg3 <= 1'b0;
+        end
+
+        else begin
+            {sync_reg3, sync_reg2, sync_reg1} <= {sync_reg2, sync_reg1, pwm_in};
+        end
+    end
+
+    assign HWDET_in = sync_reg3;
 
     /******************************************************************/
     /* EMBSYS instantiation                                           */
@@ -198,6 +224,6 @@ module n4fpga (
         // Connections with AXI Timer
 
         .pwm0                       (pwm_out),         	// O [ 0 ] AXI Timer's PWM output signal
-		.pwm_in 					(pwm_in));	      	// I [ 0 ] HWDET module's PWM input
+		.pwm_in 					(HWDET_in));	    // I [ 0 ] HWDET module's PWM input
 
 endmodule
