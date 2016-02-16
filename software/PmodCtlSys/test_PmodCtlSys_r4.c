@@ -142,8 +142,22 @@
 /*************************** Typdefs & Structures ***************************/
 /****************************************************************************/
 	
-typedef enum {TEST_BANGBANG = 0x0, TEST_STEPLOHI = 0x01, TEST_STEPHILO = 0x02, 
+typedef enum {TEST_BANGBANG = 0x0, TEST_PID = 0x01, TEST_RSVD = 0x02, 
 				TEST_CHARACTERIZE = 0x03, TEST_INVALID = 0xFF} Test_t;
+
+typedef struct {
+
+	signed int 	pGain;		// gain for proportional term
+	signed int 	iGain;		// gain for integral term
+	signed int 	dGain;		// gain for derivative term
+
+	signed int 	iState;		// state for integral term
+	signed int 	dState; 	// state for derivative term
+
+	signed int 	iMin;		// minimum allowed value for integral term
+	signed int 	iMax; 		// maximum allowed value for integral term
+
+} 	struct_PID, *struct_PID_Ptr;
 
 /****************************************************************************/
 /************************** Variable Definitions ****************************/	
@@ -191,6 +205,7 @@ XStatus 		DoTest_Track(void);										// Perform Tracking test
 XStatus			DoTest_Step(int dc_start);								// Perform Step test
 XStatus			DoTest_Characterize(void);								// Perform Characterization test
 XStatus 		DoTest_BangBang(unsigned int setpoint);					// Perform bang-bang control test
+XStatus 		DoTest_PID(unsigned int setpoint, struct_PID * PID);	// Perform PID control test
 			
 XStatus			do_init(void);											// initialize system
 void			delay_msecs(u32 msecs);									// busy-wait delay for "msecs" milliseconds
@@ -1031,6 +1046,127 @@ XStatus DoTest_BangBang(unsigned int setpoint) {
 
 	// mission accomplished... return to caller
 
-	return XST_SUCCESS;	
+	return XST_SUCCESS;
+}
 
+/****************************************************************************
+ * DoTest_PID() - On/off control loop algorithm
+ *  
+ * 
+ ****************************************************************************/
+
+XStatus DoTest_PID(unsigned int setpoint, struct_PID * PID) {
+
+	XStatus		Status;					// Xilinx return status
+	unsigned	tss;					// starting timestamp
+	unsigned 	sensor_value;			// frequency count from sensor [10, 400]
+	signed 		error;					// signed value of the error
+	signed 		prev_error;				// signed value of the last iteration's error
+
+	signed 		pTerm;					// proportional term (P = Gp * error)
+	signed 		iTerm;					// integral term (I = Gi + error)
+	signed 		dTerm;					// derivative term (D = Gd * (error - prev_error))
+		
+	// stabilize the PWM output (and thus the lamp intensity) before test
+	// if setpoint is higher than halfway point --> set initial voltage to 0.0V
+	// if setpoint is lower than halway point --> set initial voltage to +3.3V
+
+	if (setpoint > STEPDC_MAX / 2) {
+		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, STEPDC_MIN);
+	}
+
+	else {
+		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, STEPDC_MAX);
+	}
+
+	// start the PWM now (hopefully)...
+
+	if (Status == XST_SUCCESS) {
+		PWM_Start(&PWMTimerInst);
+	}
+
+	else {
+		xil_printf("Died trying to initialize PWM for test...");
+		return XST_FAILURE;
+	}
+
+	// wait for LED output to settle before starting
+
+	delay_msecs(1500);
+
+	// time to run the test & collect data
+
+	smpl_idx = 0;
+	tss = timestamp;
+
+	while (smpl_idx < NUM_FRQ_SAMPLES) {
+
+		// light sensor measurement using HWDET...
+		// store values in global array sample[ ]
+		// also, increment the sample index
+
+		sensor_value = HWDET_calc_freq();
+		sample[smpl_idx++] = sensor_value;
+
+		// PID control algorithm
+
+		// first, calculate error and store previous error
+
+		prev_error = error;
+		error = sensor_value - setpoint;
+
+		// Proportional term
+
+		pTerm = (PID->pGain) * error;
+
+		// Intergral term
+		
+		// only accumulate within +/- 6% of target value
+
+		PID->iState = (error < (setpoint / 16)) ? ((PID->iState) + error) : (PID->iState);
+
+		// bound it to maximum/minimum values
+
+		PID->iState = ((PID->iState) > (PID->iMax)) ? (PID->iMax) : (PID->iState);
+		PID->iState = ((PID->iState) < (PID->iMin)) ? (PID->iMin) : (PID->iState);
+
+		iTerm = (PID->iGain) * (PID->iState);
+
+		// Derivative term
+
+		(PID->dState) = error - prev_error;
+		dTerm = (PID->dGain) * (PID->dState);
+
+		// PID sum converted to applied duty cycle
+		// making sure to bound to 1%-99% range
+
+		pwm_duty = pTerm + iTerm + dTerm;
+		pwm_duty = MAX(STEPDC_MIN, MIN(pwm_duty, STEPDC_MAX));
+
+		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_duty);
+
+		// make sure new pwm_duty updated correctly...
+
+		if (Status == XST_SUCCESS) {
+			PWM_Start(&PWMTimerInst);
+		}
+
+		else {
+			xil_printf("Died while updating pwm_duty to %d...", pwm_duty);
+			return XST_FAILURE;
+		}
+
+		// arbitrary delay to make the routine run smoother...
+
+		delay_msecs(1);
+	}		
+
+	// all samples collected and loop is finished...
+	// measure sample time interval by subtracting timestamps
+
+	frq_smple_interval = (timestamp - tss) / NUM_FRQ_SAMPLES;
+
+	// mission accomplished... return to caller
+
+	return XST_SUCCESS;
 }
