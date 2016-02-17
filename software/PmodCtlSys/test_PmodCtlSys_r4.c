@@ -145,6 +145,8 @@
 typedef enum {TEST_BANGBANG = 0x0, TEST_PID = 0x01, TEST_RSVD = 0x02, 
 				TEST_CHARACTERIZE = 0x03, TEST_INVALID = 0xFF} Test_t;
 
+typedef enum {P, I, D, SetMode} Menu;
+
 typedef struct {
 
 	signed int 	pGain;		// gain for proportional term
@@ -190,6 +192,7 @@ signed int 				FRQ_min_cnt;				// minimum freq value when duty = 1%
 signed int 				FRQ_max_cnt;				// maximum freq value when duty = 99%
 
 sPID * 					testPIDptr;					// make the pointer to the PID structure globally accessible
+Menu 					menu;						// global menu typedef
 
 // Light Sensor Peripheral parameters
 // Add whatever global variables you need to use your Light Sensor peripheral driver
@@ -207,7 +210,7 @@ XStatus 		DoTest_Track(void);										// Perform Tracking test
 XStatus			DoTest_Step(int dc_start);								// Perform Step test
 XStatus			DoTest_Characterize(void);								// Perform Characterization test
 XStatus 		DoTest_BangBang(unsigned int setpoint);					// Perform bang-bang control test
-XStatus 		DoTest_PID(unsigned int setpoint, sPID * PID);		// Perform PID control test
+XStatus 		DoTest_PID(unsigned int setpoint, sPID * PID);			// Perform PID control test
 			
 XStatus			do_init(void);											// initialize system
 void			delay_msecs(u32 msecs);									// busy-wait delay for "msecs" milliseconds
@@ -216,6 +219,8 @@ void			update_lcd(int vin_dccnt, short vout_frqcnt);			// update LCD display
 float 			freq2volt(short freq); 									// converts HWDET frequency into applied voltage
 
 void			FIT_Handler(void);										// fixed interval timer interrupt handler
+
+unsigned		update_menu(sPID * testPIDptr);										// update the LCD screen for menu
 
 /****************************************************************************/
 /************************** MAIN PROGRAM ************************************/
@@ -228,6 +233,8 @@ int main() {
 	int					rotcnt, old_rotcnt = 0x1000;
 	Test_t				test, next_test;
 
+	// create & initialize the PID structure
+
 	sPID * testPIDptr = malloc(sizeof(sPID));
 
 	testPIDptr->pGain 	= 5;
@@ -235,9 +242,13 @@ int main() {
 	testPIDptr->dGain 	= 5; 		
 	testPIDptr->iState 	= 0;
 	testPIDptr->dState 	= 0; 		
-	testPIDptr->iMin 	= -10; 		
-	testPIDptr->iMax 	= 10; 
+	testPIDptr->iMin 	= -5; 		
+	testPIDptr->iMax 	= 5; 
 	
+	// initialize the menu to SetMode
+
+	menu = SetMode;
+
 	// initialize devices and set up interrupts, etc.
 
  	Status = do_init();
@@ -267,6 +278,7 @@ int main() {
 	PMDIO_LCD_setcursor(2,0);
 	PMDIO_LCD_wrstring("R4.0 by Rehan I.");
 	NX4IO_setLEDs(0x0000FFFF);
+	NX4IO_SSEG_putU32Hex(0x00000000);
 
 	// Run the LED characterization routine to establish sensor min's and max's
 
@@ -403,6 +415,8 @@ int main() {
 				next_test = test;		
 			}
 
+			delay_msecs(500);
+
 		} // end Bang-Bang test
 
 		// Test 1 = PID Control
@@ -413,31 +427,7 @@ int main() {
 			char			s[20];	
 			unsigned int 	setpoint;		
 			
-			// write the static info to the display if necessary
-
-			PMDIO_LCD_clrd();
-			PMDIO_LCD_setcursor(1,0);
-			PMDIO_LCD_wrstring("|PID|Press RBtn");
-			PMDIO_LCD_setcursor(2,0);
-			PMDIO_LCD_wrstring("SetPt:");
-
-			// read the rotary encoder for target value
-			PMDIO_ROT_readRotcnt(&rotcnt);
-
-			// map the rotary reading to appropriate range
-			// based on minimum & maximum frequency counts
-			setpoint = MAX(FRQ_min_cnt, MIN(rotcnt, FRQ_max_cnt));
-
-			// convert this to voltage to display on LCD
-			v = freq2volt(setpoint);
-			voltstostrng(v, s);
-
-			// display on LCD screen				
-			PMDIO_LCD_setcursor(2,6);
-			PMDIO_LCD_wrstring(s);
-
-			// debugging on 7-segment
-			NX4IO_SSEG_putU32Dec(setpoint, 1);	
+			setpoint = update_menu(testPIDptr);
 			
 			// start the test on the rising edge of the Rotary Encoder button press
 			// the test will write the light detector samples into the global "sample[]"
@@ -525,6 +515,8 @@ int main() {
 			else {
 				next_test = test;		
 			}
+
+			delay_msecs(300);
 
 		} // end PID test
 
@@ -619,13 +611,9 @@ int main() {
 				next_test = test;
 			}
 
+			delay_msecs(400);
 		} // end Characterize test
 	}
-
-	// wait a bit and start again
-
-	delay_msecs(20);
-
 }
 
 /****************************************************************************/
@@ -1220,13 +1208,17 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 	}
 
 	else {
-		xil_printf("Died trying to initialize PWM for test...");
 		return XST_FAILURE;
 	}
 
 	// wait for LED output to settle before starting
 
 	delay_msecs(1500);
+
+	xil_printf("The setpoint is: %d\n", setpoint);
+	xil_printf("The P constant is: %d\n", PID->pGain);
+	xil_printf("The I constant is: %d\n", PID->iGain);
+	xil_printf("The D constant is: %d\n", PID->dGain);
 
 	// time to run the test & collect data
 
@@ -1287,7 +1279,6 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 		}
 
 		else {
-			xil_printf("Died while updating pwm_duty to %d...", pwm_duty);
 			return XST_FAILURE;
 		}
 
@@ -1304,4 +1295,176 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 	// mission accomplished... return to caller
 
 	return XST_SUCCESS;
+}
+
+
+/****************************************************************************
+ * update_menu() - updates LCD screen depending on menu mode & buttons
+ *  
+ * 
+ ****************************************************************************/
+
+unsigned update_menu(sPID * testPIDptr) {
+
+	volatile unsigned 	btns = 0x00;
+	static unsigned 	setpoint = 100;
+	float				v;
+	char				s[20];
+	int					rotcnt = 0x1000;
+	static int			menuP;
+	static int			menuI;
+	static int			menuD;
+
+	PMDIO_LCD_clrd();
+
+	switch (menu) {
+
+		case P:
+
+			PMDIO_LCD_setcursor(1,0);
+			PMDIO_LCD_wrstring("|P|Press RBtn");
+			PMDIO_LCD_setcursor(2,0);
+			PMDIO_LCD_wrstring("gainP:");
+
+			btns = NX4IO_getBtns();
+
+			switch (btns) {
+
+				case (0x01) :	menu = SetMode; break;		// change to SetMode for left button
+				case (0x02) :	menu = I; break;			// change to I mode for right button
+				case (0x04) : 	menuP -=1; 		break;
+				case (0x08) : 	menuP +=1; 		break;
+			}
+
+			// map the rotary reading to appropriate range
+			// based on minimum & maximum frequency counts
+			menuP = MAX(0, MIN(menuP, 100));
+
+			// convert this to display on LCD
+			voltstostrng((float) menuP, s);
+
+			// display on LCD screen				
+			PMDIO_LCD_setcursor(2,6);
+			PMDIO_LCD_wrstring(s);
+
+			// debugging on 7-segment
+			NX4IO_SSEG_putU32Dec(menuP, 1);
+
+			// update PID structure
+			(testPIDptr->pGain) = (int) menuP;
+
+			break;
+
+		case I:
+
+			PMDIO_LCD_setcursor(1,0);
+			PMDIO_LCD_wrstring("|I|Press RBtn");
+			PMDIO_LCD_setcursor(2,0);
+			PMDIO_LCD_wrstring("gainI:");
+
+			btns = NX4IO_getBtns();
+
+			switch (btns) {
+
+				case (0x01) :	menu = P; break;		// change to P mode for left button
+				case (0x02) :	menu = D; break;		// change to D mode for right button
+				case (0x04) : 	menuI -=1; 		break;
+				case (0x08) : 	menuI +=1; 		break;
+			}
+
+			// map the rotary reading to appropriate range
+			// based on minimum & maximum frequency counts
+			menuI = MAX(0, MIN(menuI, 100));
+
+			// convert this to display on LCD
+			voltstostrng((float) menuI, s);
+
+			// display on LCD screen				
+			PMDIO_LCD_setcursor(2,6);
+			PMDIO_LCD_wrstring(s);
+
+			// debugging on 7-segment
+			NX4IO_SSEG_putU32Dec(menuI, 1);
+
+			// update PID structure
+			(testPIDptr->iGain) = (int) menuI;
+
+			break;
+
+		case D:
+
+			PMDIO_LCD_setcursor(1,0);
+			PMDIO_LCD_wrstring("|D|Press RBtn");
+			PMDIO_LCD_setcursor(2,0);
+			PMDIO_LCD_wrstring("gainD:");
+
+			btns = NX4IO_getBtns();
+
+			switch (btns) {
+
+				case (0x01) :	menu = I; 		break;			// change to I mode for left button
+				case (0x02) :	menu = SetMode; break;			// change to SetMode mode for right button
+				case (0x04) : 	menuD -=1; 		break;
+				case (0x08) : 	menuD +=1; 		break;
+
+			}
+
+			// map the rotary reading to appropriate range
+			// based on minimum & maximum frequency counts
+			menuD = MAX(0, MIN(menuD, 100));
+
+			// convert this to display on LCD
+			voltstostrng((float) menuD, s);
+
+			// display on LCD screen				
+			PMDIO_LCD_setcursor(2,6);
+			PMDIO_LCD_wrstring(s);
+
+			// debugging on 7-segment
+			NX4IO_SSEG_putU32Dec(menuD, 1);
+
+			// update PID structure
+			(testPIDptr->dGain) = (int) menuD;
+
+			break;
+
+		case SetMode:
+
+			PMDIO_LCD_clrd();
+			PMDIO_LCD_setcursor(1,0);
+			PMDIO_LCD_wrstring("|Set|Press RBtn");
+			PMDIO_LCD_setcursor(2,0);
+			PMDIO_LCD_wrstring("SetPt:");
+			
+			btns = NX4IO_getBtns();
+
+			switch (btns) {
+
+				case (0x01) :	menu = D; break;		// change to D mode for left button
+				case (0x02) :	menu = P; break;		// change to P mode for right button
+
+			}
+
+			// read the rotary encoder for target value
+			PMDIO_ROT_readRotcnt(&rotcnt);
+
+			// map the rotary reading to appropriate range
+			// based on minimum & maximum frequency counts
+			setpoint = MAX(FRQ_min_cnt, MIN(rotcnt, FRQ_max_cnt));
+
+			// convert this to voltage to display on LCD
+			v = freq2volt(setpoint);
+			voltstostrng(v, s);
+
+			// display on LCD screen				
+			PMDIO_LCD_setcursor(2,6);
+			PMDIO_LCD_wrstring(s);
+
+			// debugging on 7-segment
+			NX4IO_SSEG_putU32Dec(setpoint, 1);
+
+			break;
+	}
+
+	return setpoint;
 }
