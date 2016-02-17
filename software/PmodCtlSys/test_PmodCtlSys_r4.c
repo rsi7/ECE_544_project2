@@ -237,13 +237,13 @@ int main() {
 
 	sPID * testPIDptr = malloc(sizeof(sPID));
 
-	testPIDptr->pGain 	= 5;
-	testPIDptr->iGain 	= 5; 		
-	testPIDptr->dGain 	= 5; 		
+	testPIDptr->pGain 	= 0;
+	testPIDptr->iGain 	= 0; 		
+	testPIDptr->dGain 	= 0; 		
 	testPIDptr->iState 	= 0;
 	testPIDptr->dState 	= 0; 		
-	testPIDptr->iMin 	= -5; 		
-	testPIDptr->iMax 	= 5; 
+	testPIDptr->iMin 	= -1000; 		
+	testPIDptr->iMax 	= 1000; 
 	
 	// initialize the menu to SetMode
 
@@ -1248,16 +1248,16 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 
 		// Intergral term
 		
-		// only accumulate within +/- 6% of target value
+		// only accumulate within +/- 12.5% of target value
 
-		PID->iState = (abs(error) < (setpoint / 16)) ? ((PID->iState) + error) : (PID->iState);
+		PID->iState = (abs(error) < (setpoint / 8)) ? ((PID->iState) + error) : (PID->iState);
 
 		// // bound it to maximum/minimum values
 
 		PID->iState = ((PID->iState) > (PID->iMax)) ? (PID->iMax) : (PID->iState);
 		PID->iState = ((PID->iState) < (PID->iMin)) ? (PID->iMin) : (PID->iState);
 
-		iTerm = (PID->iGain) * (PID->iState);
+		iTerm = ((PID->iGain) * (PID->iState))/128;
 
 		// Derivative term
 
