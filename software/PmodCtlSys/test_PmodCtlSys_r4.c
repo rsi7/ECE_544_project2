@@ -7,30 +7,20 @@
 * 
 * Description:
 * 
-* This program implements a minimal test program for the Control System Pmod
-* that will be used in ECE 544 Project 2.  The program uses a Xilinx timer/counter 
-* module in PWM mode and a light sensor with a custom designed peripheral + driver.
+* This program implements the full program for the Control System Pmod
+* used in ECE 544 Project 2.  The program uses a Xilinx timer/counter 
+* module in PWM mode and a light sensor with the custom HWDET peripheral.
 *
-* NOTE TO ECE 544 STUDENT
 *
-*		Look for "//ECE544 Students:" in this program to see where edits need to be made in order
-* 		for this test application to work. There may, however, be other edits you'd like to (or need to)
-*		make elsewhere as well.
+*		sw[1:0] = 00:		Bang-bang control test. Use rotary encoder to dial in a desired setpoint,
+*							then hold the encoder button to start the test. It will upload results
+*							via UART for easy plotting.
 *
-*		sw[1:0] = 00:		Use rotary knob to dial in the PWM duty cycle.  Read/display the
-*							the light sensor value in volts.
+* 		sw[1:0] = 01:		PID control test. Use the left & right pushbuttons to select a parameter,
+							and use the up & down pushbuttons to adjust the values. Start the test
+							by holding down the rotary encoder button. 
 *
-* 		sw[1:0] = 01:		Performs a step function on the PWM duty cycle.  Monitor/Save the response
-*							of the system. Press and hold the rotary encoder pushbutton to start the test.
-*                          	Release the button when the "Run" (rightmost) LED turns off to upload the 
-*                          	data via serial port to a PC. The step function goes from 1% duty cycle to
-*                          	99% duty cycle.  
-*
-*		sw[1:0] = 10:		Performs a step function on the PWM duty cycle.  Monitor/Save the response
-*							of the system. Press and hold the rotary encoder pushbutton to start the test.
-*                          	Release the button when the "Run" (rightmost) LED turns off to upload the 
-*                          	data via serial port to a PC. The step function goes from 99% duty cycle to
-*                          	1% duty cycle.
+*		sw[1:0] = 10:		Unused by the software application.
 *
 *		sw[1:0] = 11:		Characterizes the response to the system by stepping the PWM duty cycle from
 *							min (1%) to max (99%) after allowing the light sensor output to settle. Press and hold
@@ -124,9 +114,6 @@
 #define FIT_COUNT				(FIT_IN_CLOCK_FREQ_HZ / FIT_CLOCK_FREQ_HZ)
 #define FIT_COUNT_1MSEC			(FIT_CLOCK_FREQ_HZ / 1000)	
 
-// Light Sensor Peripheral parameters
-// Add whatever constants you need to use your Light Sensor peripheral driver
-
 // sample settings	
 
 #define NUM_FRQ_SAMPLES			250	
@@ -172,8 +159,8 @@ XTmrCtr	PWMTimerInst;								// PWM timer instance
 XGpio	GPIOInst;									// GPIO instance
 
 // The following variables are shared between non-interrupt processing and
-// interrupt processing such that they must be global(and declared volatile)
-// These variables are controlled by the FIT timer interrupt handler
+// interrupt processing such that they must be global and declared volatile) -
+// these are controlled by the FIT timer interrupt handler
 
 volatile unsigned long	timestamp;					// timestamp since the program began
 volatile u32			gpio_port = 0;				// GPIO port register - maintained in program
@@ -191,16 +178,10 @@ int						pwm_duty;					// PWM duty cycle
 signed int 				FRQ_min_cnt;				// minimum freq value when duty = 1%
 signed int 				FRQ_max_cnt;				// maximum freq value when duty = 99%
 
-sPID * 					testPIDptr;					// make the pointer to the PID structure globally accessible
+sPID * 					testPIDptr;					// pointer to the PID structure
 Menu 					menu;						// global menu typedef
-
-// Light Sensor Peripheral parameters
-// Add whatever global variables you need to use your Light Sensor peripheral driver
-
 				
-/*---------------------------------------------------------------------------*/					
 int						debugen = 0;				// debug level/flag
-/*---------------------------------------------------------------------------*/
 	
 /****************************************************************************/
 /************************** Function Prototypes *****************************/
@@ -209,18 +190,18 @@ int						debugen = 0;				// debug level/flag
 XStatus 		DoTest_Track(void);										// Perform Tracking test
 XStatus			DoTest_Step(int dc_start);								// Perform Step test
 XStatus			DoTest_Characterize(void);								// Perform Characterization test
-XStatus 		DoTest_BangBang(unsigned int setpoint);					// Perform bang-bang control test
+XStatus 		DoTest_BangBang(unsigned int setpoint);					// Perform Bang-Bang control test
 XStatus 		DoTest_PID(unsigned int setpoint, sPID * PID);			// Perform PID control test
 			
 XStatus			do_init(void);											// initialize system
-void			delay_msecs(u32 msecs);									// busy-wait delay for "msecs" milliseconds
 void			voltstostrng(float v, char* s);							// converts volts to a string
-void			update_lcd(int vin_dccnt, short vout_frqcnt);			// update LCD display
-float 			freq2volt(short freq); 									// converts HWDET frequency into applied voltage
+float 			freq2volt(short freq); 									// converts sensor frequency --> voltage
 
+void			delay_msecs(u32 msecs);									// busy-wait delay for "msecs" milliseconds
 void			FIT_Handler(void);										// fixed interval timer interrupt handler
 
-unsigned		update_menu(sPID * testPIDptr);										// update the LCD screen for menu
+void			update_lcd(int vin_dccnt, short vout_frqcnt);			// updates the LCD display
+unsigned		update_menu(sPID * testPIDptr);							// updates the PID menu interface
 
 /****************************************************************************/
 /************************** MAIN PROGRAM ************************************/
@@ -233,7 +214,7 @@ int main() {
 	int					rotcnt, old_rotcnt = 0x1000;
 	Test_t				test, next_test;
 
-	// create & initialize the PID structure
+	// create & initialize a new PID structure
 
 	sPID * testPIDptr = malloc(sizeof(sPID));
 
@@ -294,7 +275,7 @@ int main() {
 
 		sw = NX4IO_getSwitches() & 0x03;		
 		
-		// Test 0 = Bang Bang Control
+		// Test 00 = Bang-Bang Control
 		
 		if (sw == TEST_BANGBANG) {
 
@@ -385,9 +366,7 @@ int main() {
 					
 					count = sample[smpl_idx];
 					
-					//ECE544 Students:
                     //Convert from count to 'volts'
-                    //v = YOUR_FUNCTION(count);
 					v = freq2volt(count);
 
 					voltstostrng(v, s);
@@ -419,7 +398,7 @@ int main() {
 
 		} // end Bang-Bang test
 
-		// Test 1 = PID Control
+		// Test 01 = PID Control
 		
 		if (sw == TEST_PID) {
 
@@ -427,6 +406,10 @@ int main() {
 			char			s[20];	
 			unsigned int 	setpoint;		
 			
+			// call the update_menu function to get new PID parameters
+			// that are used in the DoTest_PID function
+			// also updates the setpoint if menu state is 'SetMode'
+
 			setpoint = update_menu(testPIDptr);
 			
 			// start the test on the rising edge of the Rotary Encoder button press
@@ -446,7 +429,7 @@ int main() {
 
 				NX4IO_setLEDs(0x00000001);
 
-				// perform bang-bang control test
+				// perform PID control test
 
 				DoTest_PID(setpoint, testPIDptr);
 
@@ -486,9 +469,8 @@ int main() {
 					
 					count = sample[smpl_idx];
 					
-					//ECE544 Students:
                     //Convert from count to 'volts'
-                    //v = YOUR_FUNCTION(count);
+
 					v = freq2volt(count);
 
 					voltstostrng(v, s);
@@ -520,7 +502,7 @@ int main() {
 
 		} // end PID test
 
-		// Test 3 - Characterize Response
+		// Test 11 - Characterize Response
 
 		else if (sw == TEST_CHARACTERIZE) {
 
@@ -581,9 +563,7 @@ int main() {
 					
 					count = sample[smpl_idx];
 					
-					//ECE544 Students:
                     //Convert from count to 'volts'
-                    //v = YOUR_FUNCTION(count);
 					v = freq2volt(count);
 
 					voltstostrng(v, s);
@@ -612,136 +592,14 @@ int main() {
 			}
 
 			delay_msecs(400);
+
 		} // end Characterize test
-	}
-}
+	} // end while loop
+} // end main loop
 
 /****************************************************************************/
 /***************************** Test Functions *******************************/
-/****************************************************************************/
 
-/****************************************************************************
-* DoTest_Track() - Perform the Tracking test
-* 
-* This function uses the global "pwm_freq" and "pwm_duty" values to adjust the PWM
-* duty cycle and thus the intensity of the LED.  The function displays
-* the light detector reading as it tracks changes in the
-* LED intensity.  This test runs continuously until a different test is selected.
-* Returns XST_SUCCESS since this test can't fail.  Returns approximate sample interval
-* in the global variable "frq_sample_interval"
-*
-****************************************************************************/
-
-XStatus DoTest_Track(void) {
-
-	static int		old_pwm_freq = 0;			// old pwm_frequency and duty cycle
-	static int		old_pwm_duty = 200;			// these values will force the initial display	
-	u16				frq_cnt;					// light detector counts to display
-	XStatus			Status;						// Xilinx return status
-	unsigned		tss;						// starting timestamp
-
-	if ((pwm_freq != old_pwm_freq) || (pwm_duty != old_pwm_duty)) {	
-
-		// set the new PWM parameters - PWM_SetParams stops the timer
-
-		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_duty);
-
-		if (Status == XST_SUCCESS) {							
-			PWM_Start(&PWMTimerInst);
-		}
-
-		tss = timestamp;	
-		
-		//ECE544 Students:
-        //make the light sensor measurement
-		
-		delay_msecs(10);
-
-		frq_cnt = HWDET_calc_freq();
-
-		frq_smple_interval = timestamp - tss;
-				
-		// update the display and save the frequency and duty
-		// cycle for next time
-
-		update_lcd(pwm_duty, frq_cnt);
-
-		old_pwm_freq = pwm_freq;
-		old_pwm_duty = pwm_duty;
-	}
-
-	return XST_SUCCESS;
-}
-
-/****************************************************************************
- * DoTest_Step() - Perform the Step test
- * 
- * This function stabilizes the duty cycle at "dc_start" for
- * about a second and a half and then steps the duty cycle from min to max or
- * max to min depending on the test. NUM_FRQ_SAMPLES are collected
- * into the global array sample[].  An approximate sample interval
- * is written to the global variable "frq_smpl_interval"
- *
- ****************************************************************************/
-
-XStatus DoTest_Step(int dc_start) {	
-
-	XStatus		Status;					// Xilinx return status
-	unsigned	tss;					// starting timestamp
-		
-	// stabilize the PWM output (and thus the lamp intensity) before
-	// starting the test
-
-	Status = PWM_SetParams(&PWMTimerInst, pwm_freq, dc_start);
-
-	if (Status == XST_SUCCESS) {							
-		PWM_Start(&PWMTimerInst);
-	}
-
-	else {
-		return XST_FAILURE;
-	}
-
-	// Wait for the LED output to settle before starting
-
-    delay_msecs(1500);
-		
-	if (dc_start > STEPDC_MAX / 2) {
-		 Status = PWM_SetParams(&PWMTimerInst, pwm_freq, STEPDC_MIN); 
-	}
-
-	else {
-		 Status = PWM_SetParams(&PWMTimerInst, pwm_freq, STEPDC_MAX); 
-	}		
-
-	if (Status == XST_SUCCESS) {							
-		PWM_Start(&PWMTimerInst);
-		pwm_duty = dc_start;
-	}
-
-	else {
-		return XST_FAILURE;
-	}
-	
-	// gather the samples
-
-	smpl_idx = 0;
-	tss = timestamp;
-
-	while (smpl_idx < NUM_FRQ_SAMPLES) {
-	
-		//ECE544 Students:
-        //make the light sensor measurement
-		//sample[smpl_idx++] = YOUR FUNCTION HERE;
-
-		sample[smpl_idx++] = HWDET_calc_freq();
-		delay_msecs(1);
-	}		
-
-	frq_smple_interval = (timestamp - tss) / NUM_FRQ_SAMPLES;
-	return XST_SUCCESS;
-}
-	
 /****************************************************************************
 *
 * DoTest_Characterize() - Perform the Characterization test
@@ -777,7 +635,7 @@ XStatus DoTest_Characterize(void) {
 		return -1;
 	}
 
-	//Wait for the LED output to settle before starting
+	// Wait for the LED output to settle before starting
 
     delay_msecs(1500);
 		
@@ -799,12 +657,10 @@ XStatus DoTest_Characterize(void) {
 			return -1;
 		}
 		
-        //ECE544 Students:
-        // make the light sensor measurement
-		//sample[smpl_idx++] = YOUR FUNCTION HERE;
+		// wait for the new PWM duty to settle...
+        // then make the light sensor measurement
 		
 		delay_msecs(50);
-
 		sample[smpl_idx++] = HWDET_calc_freq();
 		
 		n++;
@@ -812,12 +668,8 @@ XStatus DoTest_Characterize(void) {
 
 	frq_smple_interval = (timestamp - tss) / smpl_idx;
 
-    //ECE544 Students:
-    //Find the min and max values and set the scaling/offset factors to use for your convert to 'voltage' function.
-    //NOTE: It may also be useful to scale the actual 'count' values to a range of 0 - 4095 for the SerialCharter application to work correctly 
-    // FRQ_max_cnt = ?
-    // FRQ_min_cnt = ?
-	// YOUR_FUNCTION(FRQ_min_cnt,FRQ_max_cnt);
+    // Find the min and max values and set the scaling/offset factors
+    // these are used in the freq2volt function
 	
 	FRQ_min_cnt = sample[STEPDC_MIN];
 	FRQ_max_cnt = sample[STEPDC_MAX];
@@ -1012,19 +864,30 @@ void update_lcd(int vin_dccnt, short frqcnt) {
 	// update the PWM data
 
 	v = vin_dccnt * .01 * PWM_VIN;
+
+	// convert the PWM data to a string
+
 	voltstostrng(v, s);
+
+	// now print that string
+
 	PMDIO_LCD_setcursor(1, 11);
 	PMDIO_LCD_wrstring("      ");
 	PMDIO_LCD_setcursor(1, 11);
 	PMDIO_LCD_wrstring(s);
 
-	// update the data
-	// ECE544 Students: Convert frequency count to 'volts'
-	// v = YOUR_FUNCTION(frqcnt);
+	// converting frequency --> voltage
+	// this returns a float type number
+	// that can be used for voltstostrng
 
 	v = freq2volt(frqcnt);
 
+	// call voltstostrng to get a string
+
 	voltstostrng(v, s);
+
+	// print the string to the LCD screen
+
 	PMDIO_LCD_setcursor(2, 3);
 	PMDIO_LCD_wrstring("     ");
 	PMDIO_LCD_setcursor(2, 3);
@@ -1039,7 +902,15 @@ void update_lcd(int vin_dccnt, short frqcnt) {
 
 /****************************************************************************
 * freq2volt - Converts detected frequency into an estimated applied voltage
-* Based on linear equation derived from characterization curve...
+*
+* Using the FRQ_min_count and FRQ_max_count values from the characterization,
+* the function scales the sensor frequency into an applied voltage.
+* This is done with simple integer & float math.
+*
+* Because of the non-linearities around 1% - 10% duty cycle, the calculated
+* voltage cannot be guaranteed to be accurate! Use frequency when possible...
+* only use the voltage on the LCD screen and for display.
+*
 ****************************************************************************/
 
 float freq2volt(short freq) {
@@ -1047,7 +918,7 @@ float freq2volt(short freq) {
  	float 			v;
  	signed int 		freq_signed;
 
- 	freq_signed = freq;
+ 	freq_signed = (int) freq;
 
  	// calculate the voltage
  	// by scaling to get duty cycle (temporary sum)
@@ -1065,14 +936,17 @@ float freq2volt(short freq) {
 /****************************************************************************
  * FIT_Handler() - Fixed interval timer interrupt handler 
  *  
- * updates the global "timestamp" every millisecond.  "timestamp" is used for the delay_msecs() function
+ * updates the global "timestamp" every millisecond.  
+ * "timestamp" is used for the delay_msecs() function
  * and as a time stamp for data collection and reporting
  *
  ****************************************************************************/
 
 void FIT_Handler(void) {
 
-	static	int			ts_interval = 0;			// interval counter for incrementing timestamp
+	// interval counter for incrementing timestamp
+	
+	static	int			ts_interval = 0;
 			
 	// update timestamp
 
@@ -1087,7 +961,14 @@ void FIT_Handler(void) {
 /****************************************************************************
  * DoTest_BangBang() - On/off control loop algorithm
  *  
- * 
+ * This function executes the bang-bang control test. The initial voltage is
+ * set based on the target setpoint, and the LED is given 1.5s to settle to
+ * this initial voltage.
+ *
+ * Then either 1% or 99% duty cycle is applied depending on whether the current
+ * frequency is higher/lower than the setpoint. 250 samples are collected into
+ * the global sample array. The function returns a success / failure code.
+ *
  ****************************************************************************/
 
 XStatus DoTest_BangBang(unsigned int setpoint) {
@@ -1096,7 +977,6 @@ XStatus DoTest_BangBang(unsigned int setpoint) {
 	unsigned	tss;					// starting timestamp
 	unsigned 	sensor_value;			// frequency count from sensor [10, 400]
 		
-	// stabilize the PWM output (and thus the lamp intensity) before test
 	// if setpoint is higher than halfway point --> set initial voltage to 0.0V
 	// if setpoint is lower than halway point --> set initial voltage to +3.3V
 
@@ -1137,11 +1017,14 @@ XStatus DoTest_BangBang(unsigned int setpoint) {
 		sensor_value = HWDET_calc_freq();
 		sample[smpl_idx++] = sensor_value;
 
-		// bang-bang control algorithm
+		// bang-bang control algorithm (in one line)
+
 		// use ternary operator to choose between [1,99] for new pwm_duty
-		// based on whether sensor reading is higher/lower than setpoint
+		// based on whether sensor reading is higher / lower than setpoint
 
 		pwm_duty = sensor_value > setpoint ? STEPDC_MIN : STEPDC_MAX;
+
+		// update the PWM duty cycle...
 
 		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_duty);
 
@@ -1156,7 +1039,7 @@ XStatus DoTest_BangBang(unsigned int setpoint) {
 			return XST_FAILURE;
 		}
 
-		// arbitrary delay to make the routine run smoother...
+		// arbitrary sampling delay to make the graphs look better...
 
 		delay_msecs(1);
 	}		
@@ -1172,9 +1055,24 @@ XStatus DoTest_BangBang(unsigned int setpoint) {
 }
 
 /****************************************************************************
- * DoTest_PID() - On/off control loop algorithm
- *  
- * 
+* DoTest_PID() - PID control test
+*  
+* This function sets up and executes the PID control test. It starts
+* by setting the initial condition based on setpoint - if the setpoint is
+* high, it initializes to 0.0V, and if setpoint is low, it initializes to 3.3V
+*
+* Then it runs the PID test. The pTerm, iTerm, and dTerms are calculated
+* by loading the new gains from the update_menu function. Then they are multiplied
+* by the appropriate error function.
+*
+* The integral term has restricted to a minimum / maximum range, divided by 128,
+* and can only accumulate within +/- 12.5% of the setpoint value. All
+* these are an effort to limit integral windup and stabilize long-term output.
+*
+* The new duty cycle is calculated from the sum of these three terms and 
+* then applied. The sensor readings are updated in the global sample array
+* and the test finishes after 250 samples.
+*
  ****************************************************************************/
 
 XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
@@ -1189,7 +1087,6 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 	signed 		iTerm;					// integral term (I = Gi + error)
 	signed 		dTerm;					// derivative term (D = Gd * (error - prev_error))
 		
-	// stabilize the PWM output (and thus the lamp intensity) before test
 	// if setpoint is higher than halfway point --> set initial voltage to 0.0V
 	// if setpoint is lower than halway point --> set initial voltage to +3.3V
 
@@ -1215,6 +1112,8 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 
 	delay_msecs(1500);
 
+	// some debugging statements
+	
 	xil_printf("The setpoint is: %d\n", setpoint);
 	xil_printf("The P constant is: %d\n", PID->pGain);
 	xil_printf("The I constant is: %d\n", PID->iGain);
@@ -1252,10 +1151,13 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 
 		PID->iState = (abs(error) < (setpoint / 8)) ? ((PID->iState) + error) : (PID->iState);
 
-		// // bound it to maximum/minimum values
+		// bound it to maximum / minimum values
 
 		PID->iState = ((PID->iState) > (PID->iMax)) ? (PID->iMax) : (PID->iState);
 		PID->iState = ((PID->iState) < (PID->iMin)) ? (PID->iMin) : (PID->iState);
+
+		// scale it down by ~100 
+		// so iGain = 1 is limited to +/- 10% effect on duty
 
 		iTerm = ((PID->iGain) * (PID->iState))/128;
 
@@ -1265,10 +1167,12 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 		dTerm = (PID->dGain) * (PID->dState);
 
 		// PID sum converted to applied duty cycle
-		// making sure to bound to 1%-99% range
+		// making sure to bound to 1% - 99% range
 
 		pwm_duty = pTerm + iTerm + dTerm;
 		pwm_duty = MAX(STEPDC_MIN, MIN(pwm_duty, STEPDC_MAX));
+
+		// apply this new PWM duty cycle
 
 		Status = PWM_SetParams(&PWMTimerInst, pwm_freq, pwm_duty);
 
@@ -1282,7 +1186,7 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 			return XST_FAILURE;
 		}
 
-		// arbitrary delay to make the routine run smoother...
+		// arbitrary sampling delay to make the graph look smoother...
 
 		delay_msecs(1);
 	}		
@@ -1299,18 +1203,31 @@ XStatus DoTest_PID(unsigned int setpoint, sPID * PID) {
 
 
 /****************************************************************************
- * update_menu() - updates LCD screen depending on menu mode & buttons
+ * update_menu() - implements the menu interface for setting PID parameters
  *  
- * 
+ * This function allows the user to adjust the PID test parameters.
+ * A case statement evaluates the menu state - for 'SetMode' the rotary
+ * encoder is used to dial in a target frequency (similar to bang-bang).
+ *
+ * For the other three menu states, the buttons are checked with a case statement
+ * to determine whether to increment/decrement the gain or switch to a 
+ * different menu mode.
+ *
+ * Function wraps up by updating the gain parameter and writing it to the 
+ * PID structure so that the PID control test can use it. It also updates
+ * the 7-segment display with this information.
+ *
  ****************************************************************************/
 
 unsigned update_menu(sPID * testPIDptr) {
 
 	volatile unsigned 	btns = 0x00;
 	static unsigned 	setpoint = 100;
+
 	float				v;
 	char				s[20];
 	int					rotcnt = 0x1000;
+
 	static int			menuP;
 	static int			menuI;
 	static int			menuD;
@@ -1322,30 +1239,22 @@ unsigned update_menu(sPID * testPIDptr) {
 		case P:
 
 			PMDIO_LCD_setcursor(1,0);
-			PMDIO_LCD_wrstring("|P|Press RBtn");
+			PMDIO_LCD_wrstring("|P| adjust pGain");
 			PMDIO_LCD_setcursor(2,0);
-			PMDIO_LCD_wrstring("gainP:");
+			PMDIO_LCD_wrstring("Use up/down btns");
 
 			btns = NX4IO_getBtns();
 
 			switch (btns) {
 
-				case (0x01) :	menu = SetMode; break;		// change to SetMode for left button
-				case (0x02) :	menu = I; break;			// change to I mode for right button
-				case (0x04) : 	menuP -=1; 		break;
-				case (0x08) : 	menuP +=1; 		break;
+				case (0x01) :	menu = SetMode; break;		// left button
+				case (0x02) :	menu = I; 		break;		// right button
+				case (0x04) : 	menuP -=1; 		break;		// down button
+				case (0x08) : 	menuP +=1; 		break;		// up button
 			}
 
 			// map the rotary reading to appropriate range
-			// based on minimum & maximum frequency counts
 			menuP = MAX(0, MIN(menuP, 100));
-
-			// convert this to display on LCD
-			voltstostrng((float) menuP, s);
-
-			// display on LCD screen				
-			PMDIO_LCD_setcursor(2,6);
-			PMDIO_LCD_wrstring(s);
 
 			// debugging on 7-segment
 			NX4IO_SSEG_putU32Dec(menuP, 1);
@@ -1358,30 +1267,22 @@ unsigned update_menu(sPID * testPIDptr) {
 		case I:
 
 			PMDIO_LCD_setcursor(1,0);
-			PMDIO_LCD_wrstring("|I|Press RBtn");
+			PMDIO_LCD_wrstring("|I| adjust iGain");
 			PMDIO_LCD_setcursor(2,0);
-			PMDIO_LCD_wrstring("gainI:");
+			PMDIO_LCD_wrstring("Use up/down btns");
 
 			btns = NX4IO_getBtns();
 
 			switch (btns) {
 
-				case (0x01) :	menu = P; break;		// change to P mode for left button
-				case (0x02) :	menu = D; break;		// change to D mode for right button
-				case (0x04) : 	menuI -=1; 		break;
-				case (0x08) : 	menuI +=1; 		break;
+				case (0x01) :	menu = P; 		break;		// left button
+				case (0x02) :	menu = D; 		break;		// right button
+				case (0x04) : 	menuI -=1; 		break;		// down button
+				case (0x08) : 	menuI +=1; 		break;		// up button
 			}
 
 			// map the rotary reading to appropriate range
-			// based on minimum & maximum frequency counts
 			menuI = MAX(0, MIN(menuI, 100));
-
-			// convert this to display on LCD
-			voltstostrng((float) menuI, s);
-
-			// display on LCD screen				
-			PMDIO_LCD_setcursor(2,6);
-			PMDIO_LCD_wrstring(s);
 
 			// debugging on 7-segment
 			NX4IO_SSEG_putU32Dec(menuI, 1);
@@ -1394,31 +1295,23 @@ unsigned update_menu(sPID * testPIDptr) {
 		case D:
 
 			PMDIO_LCD_setcursor(1,0);
-			PMDIO_LCD_wrstring("|D|Press RBtn");
+			PMDIO_LCD_wrstring("|D| adjust dGain");
 			PMDIO_LCD_setcursor(2,0);
-			PMDIO_LCD_wrstring("gainD:");
+			PMDIO_LCD_wrstring("Use up/down btns");
 
 			btns = NX4IO_getBtns();
 
 			switch (btns) {
 
-				case (0x01) :	menu = I; 		break;			// change to I mode for left button
-				case (0x02) :	menu = SetMode; break;			// change to SetMode mode for right button
-				case (0x04) : 	menuD -=1; 		break;
-				case (0x08) : 	menuD +=1; 		break;
+				case (0x01) :	menu = I; 			break;			// left button
+				case (0x02) :	menu = SetMode; 	break;			// right button
+				case (0x04) : 	menuD -=1; 			break;			// up button
+				case (0x08) : 	menuD +=1; 			break;			// down button
 
 			}
 
 			// map the rotary reading to appropriate range
-			// based on minimum & maximum frequency counts
 			menuD = MAX(0, MIN(menuD, 100));
-
-			// convert this to display on LCD
-			voltstostrng((float) menuD, s);
-
-			// display on LCD screen				
-			PMDIO_LCD_setcursor(2,6);
-			PMDIO_LCD_wrstring(s);
 
 			// debugging on 7-segment
 			NX4IO_SSEG_putU32Dec(menuD, 1);
@@ -1432,7 +1325,7 @@ unsigned update_menu(sPID * testPIDptr) {
 
 			PMDIO_LCD_clrd();
 			PMDIO_LCD_setcursor(1,0);
-			PMDIO_LCD_wrstring("|Set|Press RBtn");
+			PMDIO_LCD_wrstring("|PID| Press RBtn");
 			PMDIO_LCD_setcursor(2,0);
 			PMDIO_LCD_wrstring("SetPt:");
 			
@@ -1440,8 +1333,8 @@ unsigned update_menu(sPID * testPIDptr) {
 
 			switch (btns) {
 
-				case (0x01) :	menu = D; break;		// change to D mode for left button
-				case (0x02) :	menu = P; break;		// change to P mode for right button
+				case (0x01) :	menu = D; break;		// left button
+				case (0x02) :	menu = P; break;		// right button
 
 			}
 
@@ -1450,6 +1343,7 @@ unsigned update_menu(sPID * testPIDptr) {
 
 			// map the rotary reading to appropriate range
 			// based on minimum & maximum frequency counts
+
 			setpoint = MAX(FRQ_min_cnt, MIN(rotcnt, FRQ_max_cnt));
 
 			// convert this to voltage to display on LCD

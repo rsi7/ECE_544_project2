@@ -5,7 +5,7 @@
 * @author Rehan Iqbal (riqbal@pdx.edu)
 * @copyright Portland State University, 2016
 *
-* This header file contains identifiers and low-level driver functions for the
+* This header file contains identifiers & low-level driver prototypes for the
 * custom peripheral "HWDET". This peripheral is a hardware pulse detection module
 * written in Verilog. It implements a simple edge-based counter to report 32-bit values
 * for high interval length and low interval length.

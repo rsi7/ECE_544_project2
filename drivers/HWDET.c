@@ -12,10 +12,10 @@
 *
 * Major driver functions:
 *
-* 	o Initialize the peripheral into the correct mode
-*	o Capture a frequency reading
-*	o Convert actual 'count' measurements to a scaled output corresponding to intensity of the LED
-*	o Adjust any scaling factors based on actual characterization measurements
+* 	o HWDET_initialize: initialize the peripheral into the correct mode
+* 	o HWDET_get_count: get the timer count for the high/low intervals
+*	o HWDET_calc_freq: capture a frequency reading from the sensor
+*	o HWDET_calc_duty: calculate the duty cycle of the input signal
 */
 
 /****************************************************************************/
